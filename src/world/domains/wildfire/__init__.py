@@ -29,6 +29,9 @@ from world.domains.wildfire.physics import SimpleFirePhysicsModule as SimpleFire
 from world.domains.wildfire.rothermel_physics import (
     RothermelFirePhysicsModule as RothermelFirePhysicsModule,
 )
+from world.domains.wildfire.scripted_trend_physics import (
+    ScriptedTrendPhysics as ScriptedTrendPhysics,
+)
 from world.domains.wildfire.sampler import sample_local_conditions as sample_local_conditions
 from world.domains.wildfire.sampler import sample_thermal_region as sample_thermal_region
 from world.domains.wildfire.scenarios import create_basic_wildfire as create_basic_wildfire
@@ -54,6 +57,7 @@ __all__ = [
     "FirePhysicsModule",
     "SimpleFirePhysicsModule",
     "RothermelFirePhysicsModule",
+    "ScriptedTrendPhysics",
     # Fuel models
     "FuelModel",
     "get_fuel_model",

@@ -69,7 +69,6 @@ def build_cluster_agent_graph(
         "update_world",
         make_update_world_state(
             world_engine=agent_deps.world_engine,
-            cell_state_manager=agent_deps.cell_state_manager,
         ),
     )
 

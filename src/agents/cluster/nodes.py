@@ -7,11 +7,10 @@ Pipeline shape
 ──────────────
     START → update_world → evaluate → route_after_evaluate → report_risk → END
 
-    update_world : Deterministic. Reads state.readings (CellReadings),
-                   writes metric values onto the world grid (session
-                   ground truth), and produces cell snapshot dicts in
-                   state.updated_cells — each with an optional `trends`
-                   block describing recent direction per metric.
+    update_world : Deterministic. Reads grid ground truth for each cell
+                   in state.readings (values were written upstream by
+                   CellStateManager.update) and produces cell snapshot
+                   dicts in state.updated_cells.
     evaluate     : AI boundary. Stub mode returns deterministic placeholder
                    risk scores. LLM mode calls the model with structured
                    output. Both modes write CellRiskAssessment onto each
@@ -35,7 +34,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import NamedTuple
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.store.base import BaseStore
@@ -53,8 +51,7 @@ from agents.commons.schemas import (
 from agents.commons.state_types import StatusValue
 from llm.llm_registry import LLMRegistry
 from prompts import PromptRegistry
-from world import GenericCell, GenericWorldEngine
-from world.cell_state_manager import CellStateManager
+from world import GenericWorldEngine
 from world.domains.wildfire import FireCellState
 
 logger = logging.getLogger(__name__)
@@ -76,31 +73,18 @@ STUB_RISK_SCORE = False
 HEURISTIC_EVALUATE_THRESHOLD = 3
 
 
-class ReadingKey(NamedTuple):
-    row: int
-    col: int
-    rtype: str  # 'type' is reserved, use rtype or metric_type
-    value: float
-
-
-def generic_to_fire():
-    pass
-
-
 # ── Node: update world ────────────────────────────────────────────────────────
 def make_update_world_state(
     world_engine: GenericWorldEngine,
-    cell_state_manager: CellStateManager | None = None,
 ):
     """Factory for the update_world node.
 
-    For each cell named in ``state.readings``:
-      1. Write the metric values onto the world-grid cell (ground truth).
-      2. Snapshot the cell to a dict.
-      3. Attach a ``trends`` block sourced from the manager's per-cell
-         metric history (categorical: rising_fast/rising/stable/falling/
-         falling_fast). Trends are omitted when no manager is wired or
-         the cell has too little history.
+    Metric values are written onto the world grid upstream by
+    ``CellStateManager.update()``. This node only *reads* that ground
+    truth for each cell named in ``state.readings`` (by cell position):
+
+      1. Recompute the cell's risk heuristic from current grid values.
+      2. Snapshot the cell to a dict (post-write ground truth).
 
     The list of cell dicts is what the evaluate node hands to the LLM.
     """
@@ -110,59 +94,25 @@ def make_update_world_state(
         readings: list[CellReadings] = state.readings
         grid = world_engine.grid
 
-        unique_readings = {
-            ReadingKey(m.position.row, m.position.col, m.type, m.value)
-            for cell in readings
-            for m in cell.metrics
-        }
-
-        total_metrics = sum(len(cell.metrics) for cell in readings)
-        logger.debug(
-            "Deduplicated %d raw metrics into %d unique readings",
-            total_metrics,
-            len(unique_readings),
-        )
-
         affected_cells: dict = {}
-        for reading in unique_readings:
-            r: GenericCell = grid.get_cell(reading.row, reading.col)
-            key = (r.row, r.col)
-            if key not in affected_cells:
-                affected_cells[key] = r.to_dict()
+        for cr in readings:
+            row, col = cr.position.row, cr.position.col
+            if (row, col) in affected_cells:
+                continue
 
-            match reading.rtype:
-                case "humidity":
-                    r.cell_state.humidity_pct = reading.value
-                case "temperature":
-                    r.cell_state.temperature_c = reading.value
-                case "wind_speed":
-                    r.cell_state.wind_speed_mps = reading.value
-                case "wind_direction":
-                    r.cell_state.wind_direction_deg = reading.value
-                case _:
-                    logger.warning("Unknown metric type: %s", reading.rtype)
-                    continue
-
-            # Recompute after each metric write so the final value on the cell
-            # reflects all readings processed this tick, not just the first one.
-            f: FireCellState = r.cell_state
+            cell = grid.get_cell(row, col)
+            f: FireCellState = cell.cell_state
             factors = [
                 f.temperature_c > 32,
                 f.humidity_pct < 15,
                 f.vegetation < 0.50,
                 f.wind_speed_mps > 20,
             ]
-            r.heuristic = round(sum(factors) / len(factors) * 10)
+            cell.heuristic = round(sum(factors) / len(factors) * 10)
 
-        # Attach heuristic and trends after the loop — all metrics are written
-        # by this point so r.heuristic is the final value for this tick.
-        for (row, col), cell_dict in affected_cells.items():
-            cell = grid.get_cell(row, col)
-            cell_dict["heuristic_score"] = getattr(cell, "heuristic", 0)
-            if cell_state_manager is not None:
-                trends = cell_state_manager.get_trend(row, col)
-                if trends:
-                    cell_dict["trends"] = trends
+            cell_dict = cell.to_dict()
+            cell_dict["heuristic_score"] = cell.heuristic
+            affected_cells[(row, col)] = cell_dict
 
         return {
             "updated_cells": list(affected_cells.values()),

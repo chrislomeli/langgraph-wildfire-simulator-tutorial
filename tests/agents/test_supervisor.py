@@ -34,7 +34,6 @@ def _make_readings(cluster_id: str = "cluster-north", row: int = 0, col: int = 0
     return CellReadings(
         cluster_id=cluster_id,
         position=GridPosition(row=row, col=col),
-        metrics=[],
     )
 
 

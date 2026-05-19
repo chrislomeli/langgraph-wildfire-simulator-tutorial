@@ -65,6 +65,16 @@ _PAYLOAD_KEYS: dict[str, str] = {
     "barometric_pressure": "pressure_hpa",
 }
 
+# Maps metric_type → FireCellState field for the write-back into the world
+# grid. Mirrors the mapping the cluster agent's update_world node has used
+# historically; metric types absent here (e.g. "smoke") have no grid field.
+_GRID_FIELD: dict[str, str] = {
+    "temperature": "temperature_c",
+    "humidity": "humidity_pct",
+    "wind_speed": "wind_speed_mps",
+    "wind_direction": "wind_direction_deg",
+}
+
 
 def extract_metrics(
     source_type: str,
@@ -346,11 +356,14 @@ class _CellSnapshot:
         return False
 
     def to_readings(self, cluster_id: str) -> CellReadings:
-        """Snapshot the current state as a CellReadings envelope."""
+        """Identify this cell as a CellReadings envelope (cluster + position).
+
+        Metric values are written to the grid by ``CellStateManager.update``;
+        they are no longer carried in the envelope.
+        """
         return CellReadings(
             cluster_id=cluster_id,
             position=self.position,
-            metrics=list(self.metrics.values()),
         )
 
     def mark_evaluated(self) -> None:
@@ -454,6 +467,13 @@ class CellStateManager:
                 )
                 snap.update_metric(metric, event.cluster_id)
 
+            # Project the kept-strongest values onto the world grid so the
+            # grid is the single source of truth downstream. Keep-strongest
+            # was already resolved by snap.update_metric, so a weak fan-out
+            # reading cannot clobber a strong local one here.
+            if self._world_grid is not None:
+                self._write_grid(target_pos, snap)
+
             # Only the home cell can trigger evaluation — adjacent cells
             # accumulate metrics for spatial context but do not independently
             # trigger graph invocations.
@@ -529,6 +549,18 @@ class CellStateManager:
         return list(self._cells.keys())
 
     # ── Internal ─────────────────────────────────────────────────────────────
+
+    def _write_grid(self, pos: GridPosition, snap: _CellSnapshot) -> None:
+        """Project the snapshot's kept-strongest metrics onto the grid cell.
+
+        Direct attribute assignment mirrors the historical update_world
+        node. Metric types with no FireCellState field are skipped.
+        """
+        state = self._world_grid.get_cell(pos.row, pos.col).cell_state
+        for metric_type, field_name in _GRID_FIELD.items():
+            metric = snap.metrics.get(metric_type)
+            if metric is not None:
+                setattr(state, field_name, metric.value)
 
     def _cells_in_range(self, home: GridPosition) -> list[GridPosition]:
         """Return all grid cells within decay_radius of the home position."""

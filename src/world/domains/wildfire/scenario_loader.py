@@ -75,6 +75,7 @@ def load_scenario_from_db(
     ignition_points: list[dict[str, Any]] | None = None,
     layers: int = 1,
     use_rothermel: bool = True,
+    physics_mode: str = "rothermel",
 ) -> tuple[GenericWorldEngine[FireCellState], SensorInventory]:
     """
     Build a wildfire engine and sensor inventory entirely from the database.
@@ -89,8 +90,14 @@ def load_scenario_from_db(
                        (default 0), intensity (default 0.8).  Pass [] or
                        None for no ignition (useful for eval/test scenarios).
     layers           : Number of grid layers (default 1).
-    use_rothermel    : When True (default) use RothermelFirePhysicsModule;
-                       when False use SimpleFirePhysicsModule.
+    use_rothermel    : Legacy flag. When physics_mode is left at its
+                       default, False maps to "simple", True to "rothermel".
+    physics_mode     : "rothermel" (default) | "simple" | "scripted".
+                       "scripted" loads scenario_cell_plan via
+                       data_store.scenario_plan and never starts a fire
+                       (any ignition_points are ignored with a warning).
+                       Takes precedence over use_rothermel when set to a
+                       non-default value.
 
     Returns
     ───────
@@ -101,6 +108,25 @@ def load_scenario_from_db(
     ValueError : if the DB returns no terrain rows for the region.
     """
     ignition_points = ignition_points or []
+
+    # ── Resolve physics mode (legacy use_rothermel maps in when unset) ─
+    physics_mode = (
+        physics_mode
+        if physics_mode != "rothermel"
+        else ("rothermel" if use_rothermel else "simple")
+    )
+    if physics_mode not in ("rothermel", "simple", "scripted"):
+        raise ValueError(
+            f"Unknown physics_mode {physics_mode!r} — "
+            "expected 'rothermel', 'simple', or 'scripted'."
+        )
+    if physics_mode == "scripted" and ignition_points:
+        logger.warning(
+            "physics_mode='scripted' ignores %d ignition point(s) — "
+            "scripted scenarios never start a fire.",
+            len(ignition_points),
+        )
+        ignition_points = []
 
     # ── Load terrain from DB ─────────────────────────────────────
     terrain_repo = data_store.terrain
@@ -139,7 +165,7 @@ def load_scenario_from_db(
     time_step_min = terrain_config.time_step_min or _DEFAULT_TIME_STEP_MIN
     burn_duration_ticks = terrain_config.burn_duration_ticks or _DEFAULT_BURN_DURATION_TICKS
 
-    if use_rothermel:
+    if physics_mode == "rothermel":
         from world.domains.wildfire.rothermel_physics import RothermelFirePhysicsModule
 
         physics = RothermelFirePhysicsModule(
@@ -147,12 +173,18 @@ def load_scenario_from_db(
             time_step_min=time_step_min,
             burn_duration_ticks=burn_duration_ticks,
         )
-    else:
+    elif physics_mode == "simple":
         from world.domains.wildfire.physics import SimpleFirePhysicsModule
 
         physics = SimpleFirePhysicsModule(
             base_probability=0.15,
             burn_duration_ticks=burn_duration_ticks,
+        )
+    else:  # "scripted" — validated above
+        from world.domains.wildfire.scripted_trend_physics import ScriptedTrendPhysics
+
+        physics = ScriptedTrendPhysics(
+            plan=data_store.scenario_plan.fetch_plan(region_name),
         )
 
     # ── Build grid ───────────────────────────────────────────────
@@ -253,6 +285,7 @@ def load_scenario_from_package(
     region_name: str = "lpnf-south",
     bounds: dict = LPNF_SOUTH,
     ignition_points: list[dict[str, Any]] | None = None,
+    physics_mode: str = "rothermel",
 ) -> tuple[GenericWorldEngine[FireCellState], SensorInventory]:
     """
     Convenience wrapper — load a named region from the DB.
@@ -273,4 +306,5 @@ def load_scenario_from_package(
         data_store=data_store,
         bounds=bounds,
         ignition_points=ignition_points,
+        physics_mode=physics_mode,
     )

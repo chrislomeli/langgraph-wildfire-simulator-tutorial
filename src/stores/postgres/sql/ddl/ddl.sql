@@ -1,4 +1,4 @@
-create table if not exists resources
+create table resources
 (
     resource_id            integer not null
         constraint resources_pk
@@ -29,7 +29,10 @@ create table if not exists resources
     location               geography(Point, 4326)
 );
 
-create table if not exists spatial_ref_sys
+alter table resources
+    owner to chrislomeli;
+
+create table spatial_ref_sys
 (
     srid      integer not null
         primary key
@@ -41,9 +44,12 @@ create table if not exists spatial_ref_sys
     proj4text varchar(2048)
 );
 
+alter table spatial_ref_sys
+    owner to chrislomeli;
+
 grant select on spatial_ref_sys to public;
 
-create table if not exists terrain
+create table terrain
 (
     grid_column         integer,
     grid_row            integer,
@@ -51,7 +57,6 @@ create table if not exists terrain
     cell_key            varchar(30),
     terrain             varchar(30),
     vegetation          double precision,
-    fuel_moisture       double precision,
     slope               real,
     cell_size_ft        integer,
     time_step_min       real,
@@ -60,16 +65,14 @@ create table if not exists terrain
     long                double precision,
     location            geography(Point, 4326),
     region              varchar(60),
-    temperature_c       real default 30.0,
-    humidity_pct        real default 25.0,
-    wind_speed_mps      real default 5.0,
-    wind_direction_deg  real default 0.0,
-    pressure_hpa        real default 1013.0,
     constraint terrain_pk
         unique (grid_column, grid_row)
 );
 
-create table if not exists sensors
+alter table terrain
+    owner to chrislomeli;
+
+create table sensors
 (
     grid_row    integer,
     grid_column integer,
@@ -86,7 +89,10 @@ create table if not exists sensors
     region      varchar(60)
 );
 
-create table if not exists wildfire_activity
+alter table sensors
+    owner to chrislomeli;
+
+create table wildfire_activity
 (
     imsr_date            date,
     gacc                 varchar(30),
@@ -110,7 +116,10 @@ create table if not exists wildfire_activity
     origin_ownership     varchar(60)
 );
 
-create table if not exists resource_assignments
+alter table wildfire_activity
+    owner to chrislomeli;
+
+create table resource_assignments
 (
     resource_id            integer,
     fire_id                integer,
@@ -121,7 +130,10 @@ create table if not exists resource_assignments
 
 comment on column resource_assignments.commitment_start_days is 'days since committment started - for simulation backdate this many days to get s start date';
 
-create table if not exists current_fires
+alter table resource_assignments
+    owner to chrislomeli;
+
+create table current_fires
 (
     imsr_date           date,
     gacc                varchar(30),
@@ -148,14 +160,18 @@ create table if not exists current_fires
     fire_id             integer
 );
 
-drop table resource_advisories;
+alter table current_fires
+    owner to chrislomeli;
 
-create table if not exists resource_advisories
+create table resource_advisories
 (
     id                   uuid                                      not null
         primary key,
     created_at           timestamp with time zone                  not null,
-    status               varchar default 'SENT'::character varying not null  CHECK (status IN ('SENT', 'SUPPRESSED', 'ACKNOWLEDGED')),
+    status               varchar default 'SENT'::character varying not null
+        constraint resource_advisories_status_check
+            check ((status)::text = ANY
+                   ((ARRAY ['SENT'::character varying, 'SUPPRESSED'::character varying, 'ACKNOWLEDGED'::character varying])::text[])),
     epicenter_row        integer                                   not null,
     epicenter_column     integer                                   not null,
     location_description varchar                                   not null,
@@ -167,5 +183,94 @@ create table if not exists resource_advisories
     recommendation       text                                      not null
 );
 
-create index if not exists idx_resource_advisories_guardrail
+alter table resource_advisories
+    owner to chrislomeli;
+
+create index idx_resource_advisories_guardrail
     on resource_advisories (epicenter_row, epicenter_column, status, created_at);
+
+create table cell_state
+(
+    state_group        varchar(40)                not null,
+    grid_row           integer                    not null,
+    grid_column        integer                    not null,
+    layer              integer          default 0 not null,
+    temperature_c      real,
+    humidity_pct       real,
+    wind_speed_mps     real,
+    wind_direction_deg real,
+    pressure_hpa       real,
+    fuel_moisture      double precision,
+    fire_intensity     double precision default 0 not null,
+    risk_score         integer          default 0 not null,
+    confidence         integer          default 0 not null,
+    region             varchar(60),
+    constraint cell_state_pk
+        unique (state_group, grid_row, grid_column, layer, region)
+);
+
+alter table cell_state
+    owner to chrislomeli;
+
+
+create table scenario_cell_plan
+(
+    region         varchar(60)                  not null,
+    grid_row       integer                      not null,
+    grid_column    integer                      not null,
+    layer          integer     default 0        not null,
+    metric         varchar(20)                  not null,
+    start_tick     integer     default 0        not null,
+    duration_ticks integer                      not null,
+    start_value    real,
+    target_value   real                         not null,
+    curve          varchar(12) default 'linear' not null,
+    hold_after     boolean     default true     not null,
+    constraint scenario_cell_plan_pk
+        unique (region, grid_row, grid_column, layer, metric, start_tick),
+    constraint scp_metric_ck
+        check (metric in ('temperature_c', 'humidity_pct', 'wind_speed_mps',
+                          'wind_direction_deg', 'pressure_hpa', 'fuel_moisture')),
+    constraint scp_curve_ck
+        check (curve in ('linear', 'ease_in', 'ease_out', 'step')),
+    constraint scp_dur_ck
+        check (duration_ticks >= 1)
+);
+
+alter table scenario_cell_plan
+    owner to chrislomeli;
+
+
+create view v_cell_plan as
+select cs.region,
+       cs.grid_row,
+       cs.grid_column,
+       cs.layer,
+       cs.temperature_c,
+       cs.humidity_pct,
+       cs.wind_speed_mps,
+       cs.fuel_moisture,
+       coalesce(
+               json_agg(
+               json_build_object(
+                       'metric', p.metric,
+                       'start_tick', p.start_tick,
+                       'duration_ticks', p.duration_ticks,
+                       'start_value', p.start_value,
+                       'target_value', p.target_value,
+                       'curve', p.curve,
+                       'hold_after', p.hold_after
+                   ) order by p.metric, p.start_tick
+                       ) filter (where p.metric is not null),
+               '[]'
+       ) as plan
+from cell_state cs
+         left join scenario_cell_plan p
+                   on p.region = cs.region
+                       and p.grid_row = cs.grid_row
+                       and p.grid_column = cs.grid_column
+                       and p.layer = cs.layer
+where cs.state_group = 'seed'
+group by cs.region, cs.grid_row, cs.grid_column, cs.layer,
+         cs.temperature_c, cs.humidity_pct, cs.wind_speed_mps, cs.fuel_moisture;
+

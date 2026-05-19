@@ -88,28 +88,18 @@ class Sensor(BaseModel):
     region: str | None = None
 
 
-class Terrain(BaseModel):
+class TerrainState(BaseModel):
     """Model for the terrain table."""
-
     model_config = ConfigDict(populate_by_name=True)
 
     grid_column: int | None = None
     grid_row: int | None = None
     layer: int | None = None
-    cell_key: str | None = None
-    terrain: str | None = None
-    vegetation: float | None = None
-    fuel_moisture: float | None = None
-    slope: float | None = None
-    cell_size_ft: int | None = None
-    time_step_min: float | None = None
-    burn_duration_ticks: int | None = None
-    lat: float | None = None
-    long: float | None = None
-    location: str | None = None  # geography(Point, 4326) as WKT string
     region: str | None = None
+    state_group: str | None = None
 
     # Per-cell weather seed (initial conditions at tick 0)
+    fuel_moisture: float | None = None
     temperature_c: float | None = None
     humidity_pct: float | None = None
     wind_speed_mps: float | None = None
@@ -117,9 +107,26 @@ class Terrain(BaseModel):
     pressure_hpa: float | None = None
 
 
+
+class Terrain(TerrainState):
+    """Model for the terrain table."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    cell_key: str | None = None
+    terrain: str | None = None
+    vegetation: float | None = None
+    slope: float | None = None
+    cell_size_ft: int | None = None
+    time_step_min: float | None = None
+    burn_duration_ticks: int | None = None
+    lat: float | None = None
+    long: float | None = None
+    location: str | None = None  # geography(Point, 4326) as WKT string
+
+
+
 class WildfireActivity(BaseModel):
     """Model for the wildfire_activity table."""
-
     model_config = ConfigDict(populate_by_name=True)
 
     imsr_date: date | None = None
@@ -142,3 +149,21 @@ class WildfireActivity(BaseModel):
     structures_lost: int | None = None
     cost_to_date: str | None = None
     origin_ownership: int | None = None
+
+
+class ScenarioPlanSegment(BaseModel):
+    """Model for one scenario_cell_plan row — a single scripted ramp segment."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    region: str | None = None
+    grid_row: int | None = None
+    grid_column: int | None = None
+    layer: int = 0
+    metric: str
+    start_tick: int = 0
+    duration_ticks: int
+    start_value: float | None = None  # NULL => resolve from the cell's value at start_tick
+    target_value: float
+    curve: str = "linear"
+    hold_after: bool = True

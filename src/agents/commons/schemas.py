@@ -11,10 +11,10 @@ risk pipeline:
     SensorEvent (wire) → CellStateManager → CellReadings → agent → RiskAssessment
 
 CellStateManager maintains a running per-cell snapshot of the latest
-metrics, thresholds when a cell should re-evaluate, and emits a
-CellReadings envelope (cluster_id + position + metrics) per triggered cell.
-The cluster agent's update_world node writes those values onto the
-world grid — the session ground truth — then evaluate produces
+metrics, decides when a cell should re-evaluate, writes the values onto
+the world grid (session ground truth), and emits a CellReadings envelope
+(cluster_id + position) per triggered cell. The cluster agent's
+update_world node reads that grid ground truth, then evaluate produces
 RiskAssessments and writes them back onto each GenericCell.
 
 Separation of concerns
@@ -129,26 +129,17 @@ class Metric(BaseModel):
 
 
 class CellReadings(BaseModel):
-    """Latest metrics for a single triggered cell.
+    """Identifies a single triggered cell (cluster + position).
 
     The orchestrator groups CellReadings by cluster_id and the supervisor
-    fans them out to per-cluster agents. The cluster agent's update_world
-    node consumes CellReadings, writes the metric values onto the matching
-    GenericCell.cell_state in the world grid, and emits a cell-dict snapshot
-    for the evaluate node.
-
-    This replaces the previous CollatedRecord, which bundled terrain,
-    coverage, and trends inline. Terrain now lives on the cell itself
-    (FireCellState); trend categorization is attached as a small dict on
-    the cell snapshot by update_world.
+    fans them out to per-cluster agents. Metric values are written onto
+    the world grid upstream by CellStateManager.update(); update_world
+    reads that grid ground truth by position — values are no longer
+    carried in this envelope.
     """
 
     cluster_id: str = Field(description="Which cluster this cell belongs to")
     position: GridPosition = Field(description="Grid coordinates of the cell")
-    metrics: list[Metric] = Field(
-        default_factory=list,
-        description="Latest metric per type (temperature, humidity, wind_speed, wind_direction)",
-    )
 
 
 # ── The agent's output ────────────────────────────────────────────────────────

@@ -17,12 +17,14 @@ from stores.base import (
     AdvisoryRepository,
     DataStore,
     ResourceRepository,
+    ScenarioPlanRepository,
     SensorRepository,
     TerrainRepository,
     WildfireRepository,
 )
 from stores.mock.advisory_repo import MockAdvisoryRepository
 from stores.mock.resources_repo import MockResourceRepository
+from stores.mock.scenario_plan_repo import MockScenarioPlanRepository
 from stores.mock.sensor_repo import MockSensorRepository
 from stores.mock.terrain_repo import MockTerrainRepository
 from stores.mock.wildfire_repo import MockWildfireRepository
@@ -37,6 +39,7 @@ class MockDataStore(DataStore):
         self._wildfires = MockWildfireRepository()
         self._resources = MockResourceRepository()
         self._advisories = MockAdvisoryRepository()
+        self._scenario_plan = MockScenarioPlanRepository()
 
     @property
     def sensors(self) -> SensorRepository:
@@ -57,6 +60,10 @@ class MockDataStore(DataStore):
     @property
     def advisories(self) -> AdvisoryRepository:
         return self._advisories
+
+    @property
+    def scenario_plan(self) -> ScenarioPlanRepository:
+        return self._scenario_plan
 
 
 _instance: MockDataStore | None = None

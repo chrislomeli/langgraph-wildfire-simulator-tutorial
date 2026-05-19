@@ -11,6 +11,7 @@ from stores.base import DataStore
 from stores.postgres.advisory_repo import ResourceAdvisoryRepository
 from stores.postgres.gateway import PgGateway
 from stores.postgres.resources_repo import TranscriptRepository
+from stores.postgres.scenario_plan_repo import ScenarioPlanRepository
 from stores.postgres.sensor_repo import SensorRepository
 from stores.postgres.terrain_repo import TerrainRepository
 from stores.postgres.wildfire_repo import WildfireRepository
@@ -26,6 +27,7 @@ class PostgresDataStore(DataStore):
         self._wildfires: WildfireRepository | None = None
         self._resources: TranscriptRepository | None = None
         self._advisories: ResourceAdvisoryRepository | None = None
+        self._scenario_plan: ScenarioPlanRepository | None = None
 
     @property
     def gateway(self) -> PgGateway:
@@ -60,6 +62,12 @@ class PostgresDataStore(DataStore):
         if self._advisories is None:
             self._advisories = ResourceAdvisoryRepository(self._pg)
         return self._advisories
+
+    @property
+    def scenario_plan(self) -> ScenarioPlanRepository:
+        if self._scenario_plan is None:
+            self._scenario_plan = ScenarioPlanRepository(self._pg)
+        return self._scenario_plan
 
     def open(self) -> None:
         self._pg.open()

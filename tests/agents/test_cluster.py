@@ -4,7 +4,12 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.memory import InMemoryStore
 
 from agents.cluster.graph import build_cluster_agent_graph
-from agents.cluster.nodes import make_evaluate_node, make_report_risk_node, route_after_evaluate
+from agents.cluster.nodes import (
+    make_evaluate_node,
+    make_report_risk_node,
+    make_update_world_state,
+    route_after_evaluate,
+)
 from agents.cluster.state import ClusterAgentState
 from agents.commons.schemas import (
     CellReadings,
@@ -24,7 +29,6 @@ def _make_readings(
     return CellReadings(
         cluster_id=cluster_id,
         position=GridPosition(row=row, col=col),
-        metrics=[],
     )
 
 
@@ -180,6 +184,39 @@ class TestReportRiskNode:
 
 
 # ── graph integration tests ───────────────────────────────────────────────────
+
+class TestUpdateWorldReadsGrid:
+    """Step 6c: update_world reads grid ground truth by position; metric
+    values are NOT carried in the payload (they were written upstream by
+    CellStateManager.update)."""
+
+    def test_emits_cell_from_grid_not_from_metrics(self, agent_deps):
+        engine = agent_deps.world_engine
+        # Sentinel the grid with a value no default or metric would produce.
+        engine.grid.get_cell(1, 2).cell_state.temperature_c = 99.0
+
+        update_world = make_update_world_state(world_engine=engine)
+        state = ClusterAgentState(
+            cluster_id="cluster-north",
+            workflow_id="t-6c",
+            readings=[
+                CellReadings(
+                    cluster_id="cluster-north",
+                    position=GridPosition(row=1, col=2),
+                )  # no value transport — update_world must read the grid
+            ],
+        )
+
+        result = update_world(state)
+        cells = result["updated_cells"]
+
+        assert len(cells) == 1
+        assert (cells[0]["row"], cells[0]["col"]) == (1, 2)
+        # Value comes from the grid (99.0), proving it is the source of truth.
+        assert cells[0]["cell_state"]["temperature_c"] == 99.0
+        # Heuristic recomputed from grid: only temp>32 → round(1/4*10) == 2.
+        assert cells[0]["heuristic_score"] == 2
+
 
 class TestClusterAgentGraph:
     def test_build_returns_compiled_graph(self, agent_deps):

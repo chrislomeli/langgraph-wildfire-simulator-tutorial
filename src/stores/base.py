@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from stores.schemas import Resource, Terrain, WildfireActivity
+    from stores.schemas import Resource, ScenarioPlanSegment, Terrain, WildfireActivity
     from world.domains.wildfire.cell_state import FireCellState
     from world.sensor_inventory import SensorInventory
 
@@ -94,6 +94,13 @@ class AdvisoryRepository(ABC):
     ) -> list[Any]: ...
 
 
+class ScenarioPlanRepository(ABC):
+    @abstractmethod
+    def fetch_plan(
+        self, region_name: str
+    ) -> dict[tuple[int, int, int], list[ScenarioPlanSegment]]: ...
+
+
 class DataStore(ABC):
     """Top-level facade exposing per-collection repository handles."""
 
@@ -116,6 +123,10 @@ class DataStore(ABC):
     @property
     @abstractmethod
     def advisories(self) -> AdvisoryRepository: ...
+
+    @property
+    @abstractmethod
+    def scenario_plan(self) -> ScenarioPlanRepository: ...
 
     def open(self) -> None: ...
     def close(self) -> None: ...
