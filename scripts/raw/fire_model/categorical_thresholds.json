@@ -1,0 +1,83 @@
+{
+  "source": "RMRS-GTR-153",
+  "artifact_type": "categorical_thresholds",
+
+  "fire_behavior_adjective_classes": {
+    "description": "Used to compare spread rate (ROS) and flame length (FL) between fuel models. Baseline conditions: 5 mi/h midflame wind, moisture scenario D2L2, zero slope.",
+    "rate_of_spread_ch_per_h": {
+      "Very Low":  { "min": 0,   "max": 2 },
+      "Low":       { "min": 2,   "max": 5 },
+      "Moderate":  { "min": 5,   "max": 20 },
+      "High":      { "min": 20,  "max": 50 },
+      "Very High": { "min": 50,  "max": 150 },
+      "Extreme":   { "min": 150, "max": null }
+    },
+    "flame_length_ft": {
+      "Very Low":  { "min": 0,  "max": 1 },
+      "Low":       { "min": 1,  "max": 4 },
+      "Moderate":  { "min": 4,  "max": 8 },
+      "High":      { "min": 8,  "max": 12 },
+      "Very High": { "min": 12, "max": 25 },
+      "Extreme":   { "min": 25, "max": null }
+    }
+  },
+
+  "dead_fuel_moisture_scenarios": {
+    "description": "Standard dead fuel moisture content (percent) by scenario code.",
+    "scenarios": {
+      "D1": { "label": "Very Low", "1hr": 3,  "10hr": 4,  "100hr": 5 },
+      "D2": { "label": "Low",      "1hr": 6,  "10hr": 7,  "100hr": 8 },
+      "D3": { "label": "Moderate", "1hr": 9,  "10hr": 10, "100hr": 11 },
+      "D4": { "label": "High",     "1hr": 12, "10hr": 13, "100hr": 14 }
+    }
+  },
+
+  "live_fuel_moisture_scenarios": {
+    "description": "Standard live fuel moisture content (percent) by scenario code.",
+    "scenarios": {
+      "L1": { "label": "Fully Cured",       "live_herbaceous_pct": 30,  "live_woody_pct": 60  },
+      "L2": { "label": "Two-thirds Cured",  "live_herbaceous_pct": 60,  "live_woody_pct": 90  },
+      "L3": { "label": "One-third Cured",   "live_herbaceous_pct": 90,  "live_woody_pct": 120 },
+      "L4": { "label": "Fully Green",       "live_herbaceous_pct": 120, "live_woody_pct": 150 }
+    }
+  },
+
+  "herbaceous_curing_table": {
+    "description": "Relationship between observed curing level and live herbaceous moisture content. Used to estimate fuel_moisture input when direct measurement unavailable.",
+    "cell_state_field": "fuel_moisture",
+    "entries": [
+      { "curing_level": "Uncured",        "curing_pct": 0,   "live_herb_moisture_pct": 120 },
+      { "curing_level": "One-quarter",    "curing_pct": 25,  "live_herb_moisture_pct": 98  },
+      { "curing_level": "One-third",      "curing_pct": 33,  "live_herb_moisture_pct": 90  },
+      { "curing_level": "One-half",       "curing_pct": 50,  "live_herb_moisture_pct": 75  },
+      { "curing_level": "Two-thirds",     "curing_pct": 66,  "live_herb_moisture_pct": 60  },
+      { "curing_level": "Three-quarters", "curing_pct": 75,  "live_herb_moisture_pct": 53  },
+      { "curing_level": "Fully Cured",    "curing_pct": 100, "live_herb_moisture_pct": 30  }
+    ]
+  },
+
+  "dynamic_fuel_model_thresholds": {
+    "description": "Controls how live herbaceous load transfers to dead in dynamic fuel models. Affects all GR, GS, and select SH and TU models.",
+    "fully_green_threshold_pct": 120,
+    "fully_cured_threshold_pct": 30,
+    "transfer_rule": "Linear interpolation between 30% (fully cured, all load moves to dead) and 120% (fully green, all load stays live). Below 30% = fully cured. Above 120% = fully green."
+  },
+
+  "fuel_type_number_blocks": {
+    "description": "Fuel model number ranges assigned per fuel type for mapping applications.",
+    "NB": { "range": "90-99",   "label": "Nonburnable" },
+    "GR": { "range": "100-119", "label": "Grass" },
+    "GS": { "range": "120-139", "label": "Grass-Shrub" },
+    "SH": { "range": "140-159", "label": "Shrub" },
+    "TU": { "range": "160-179", "label": "Timber-Understory" },
+    "TL": { "range": "180-199", "label": "Timber Litter" },
+    "SB": { "range": "200-219", "label": "Slash-Blowdown" }
+  },
+
+  "extinction_moisture_climate_association": {
+    "description": "General association between dead fuel extinction moisture and climate. Higher extinction moisture = fuel burns under wetter conditions.",
+    "dry_arid_climate":      { "extinction_moisture_pct": 15,      "typical_fuel_types": ["GR1","GR2","GR4","GR7","GS1","GS2","SH1","SH2","SH5","SH7"] },
+    "semiarid_to_subhumid":  { "extinction_moisture_pct": "20-25", "typical_fuel_types": ["TU1","TU4","TU5","TL2","TL3","TL4","TL5","TL6","TL7"] },
+    "subhumid_to_humid":     { "extinction_moisture_pct": "30-40", "typical_fuel_types": ["GR3","GR5","GR6","GR8","GR9","GS3","GS4","SH3","SH4","SH6","SH8","SH9","TU2","TU3","TL8","TL9"] }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "source": "RMRS-GTR-153",
+  "artifact_type": "cell_state_field_mappings",
+  "description": "Explicit mapping between cell_state database columns and fire behavior fuel model concepts. Use this to translate sensor readings into fuel model reasoning inputs.",
+  "mappings": {
+    "fuel_moisture": {
+      "document_concept": "Dead fuel moisture content",
+      "reasoning_guidance": "Map to dead fuel moisture scenarios D1-D4. Values below 6% approach D1 (Very Low). Values 6-9% map to D2 (Low). Values 9-12% map to D3 (Moderate). Values above 12% map to D4 (High). For dynamic fuel models, also estimate live herbaceous moisture using the herbaceous_curing_table if curing level is observable.",
+      "scenario_thresholds": {
+        "D1_Very_Low": { "1hr_pct_max": 3 },
+        "D2_Low":      { "1hr_pct_max": 6 },
+        "D3_Moderate": { "1hr_pct_max": 9 },
+        "D4_High":     { "1hr_pct_max": 12 }
+      }
+    },
+    "vegtation_greeness_ndvi": {
+      "document_concept": "Live herbaceous moisture content / degree of curing",
+      "reasoning_guidance": "NDVI is a proxy for vegetation greenness and live fuel moisture. High NDVI (approaching 1.0) suggests uncured, green vegetation with live herbaceous moisture >= 120%. Low NDVI (approaching 0) suggests cured or absent vegetation with live herbaceous moisture <= 30%. Use as a continuous signal to interpolate live moisture scenario L1-L4 and to determine whether dynamic fuel models will transfer herbaceous load to dead.",
+      "ndvi_interpretation": {
+        "high_green":    { "ndvi_approx": ">0.5",       "live_herb_moisture": ">=120%", "curing": "Uncured",     "live_scenario": "L4" },
+        "moderate_green":{ "ndvi_approx": "0.3 to 0.5", "live_herb_moisture": "75-120%","curing": "Partly Cured","live_scenario": "L3" },
+        "low_green":     { "ndvi_approx": "0.1 to 0.3", "live_herb_moisture": "30-75%", "curing": "Mostly Cured","live_scenario": "L2" },
+        "cured":         { "ndvi_approx": "<0.1",        "live_herb_moisture": "<=30%",  "curing": "Fully Cured", "live_scenario": "L1" }
+      }
+    },
+    "vegetaion_cover_evc": {
+      "document_concept": "Fuel type classification signal",
+      "reasoning_guidance": "Existing Vegetation Cover (EVC) informs the dominant fuel type. Dense shrub cover suggests SH fuel types. Mixed grass-shrub cover suggests GS. Open grassland suggests GR. Forest with understory suggests TU or TL. Use in combination with wind_speed, fuel_moisture, and region to select the appropriate fuel type category (NB, GR, GS, SH, TU, TL, SB)."
+    },
+    "temperature_c": {
+      "document_concept": "Indirect influence on fuel moisture drying rate",
+      "reasoning_guidance": "Not a direct fuel model input. High temperatures accelerate fuel drying, pushing dead fuel moisture toward lower scenarios (D1/D2). Use as a contextual signal when fuel_moisture reading is absent or uncertain."
+    },
+    "humidity_pct": {
+      "document_concept": "Indirect influence on dead fuel moisture equilibrium",
+      "reasoning_guidance": "Not a direct fuel model input. Low relative humidity (< 20%) is associated with D1/D2 dead fuel moisture scenarios and elevated fire risk. High humidity (> 60%) is associated with D3/D4 scenarios and suppressed spread."
+    },
+    "wind_speed_mps": {
+      "document_concept": "Midflame wind speed",
+      "reasoning_guidance": "Direct fire behavior driver. Fire behavior charts in the document use midflame wind speed in mi/h. Convert: 1 m/s = 2.237 mi/h. Standard comparison charts run from 0 to 20 mi/h. Wind speed is the primary driver of rate of spread increase across all fuel types.",
+      "conversion": "mph = mps * 2.237"
+    },
+    "wind_direction_deg": {
+      "document_concept": "Fire spread direction",
+      "reasoning_guidance": "Used to determine headfire direction relative to fuel layout. Not a fuel model parameter per se, but critical for operational fire spread prediction. Combined with slope aspect, determines upslope/wind alignment scenarios."
+    },
+    "fire_intensity": {
+      "document_concept": "Observed or modeled flame length / fireline intensity",
+      "reasoning_guidance": "If fire_intensity > 0, the cell is actively burning or recently burned. Use adjective class thresholds to classify intensity level. A cell with fire_intensity in flame length equivalent > 25 ft maps to Extreme class."
+    },
+    "risk_score": {
+      "document_concept": "Composite fire behavior risk assessment output",
+      "reasoning_guidance": "Derived field — should reflect combination of fuel type, dead fuel moisture scenario, live moisture scenario, and wind speed. Use fuel model parameters and adjective class thresholds to validate or compute."
+    },
+    "region": {
+      "document_concept": "Climate zone / geographic context",
+      "reasoning_guidance": "Informs extinction moisture selection. Arid/semiarid regions default to 15% extinction moisture (dry climate models). Subhumid to humid regions use 30-40% extinction moisture. Region combined with vegetaion_cover_evc and fuel_moisture narrows fuel type selection."
+    },
+    "grid_row_grid_column_layer": {
+      "document_concept": "Spatial and vertical position",
+      "reasoning_guidance": "Layer may indicate surface (0) vs. elevated fuel strata. The document addresses surface fire behavior only — crown fire initiation is a separate model. Layer 0 is the relevant layer for Rothermel surface fire spread model inputs."
+    }
+  }
+}

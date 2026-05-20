@@ -31,6 +31,7 @@ class TerrainRepository(TerrainRepositoryBase):
     def fetch_terrain(
         self,
         region_name: str,
+        state_group: str = 'seed',
         limit: int | None = None,
     ) -> tuple[dict[tuple[int, int, int], Terrain], TerrainConfig]:
         """Load terrain cells for a region.
@@ -38,6 +39,7 @@ class TerrainRepository(TerrainRepositoryBase):
         Parameters
         ----------
         region_name : e.g. 'lpnf_south', 'lpnf_north'
+        state_group: e,g, 'seed'
         limit : Optional max cells to load (defensive, default None = all)
 
         Returns
@@ -47,32 +49,35 @@ class TerrainRepository(TerrainRepositoryBase):
             terrain_config: Physics defaults from terrain table (may be None)
         """
         sql = """
-            select
-                grid_column,
-                grid_row,
-                layer,
-                cell_key,
-                terrain,
-                vegetation,
-                fuel_moisture,
-                slope,
-                cell_size_ft,
-                time_step_min,
-                burn_duration_ticks,
-                lat,
-                long,
-                location,
-                region,
-                temperature_c,
-                humidity_pct,
-                wind_speed_mps,
-                wind_direction_deg,
-                pressure_hpa
-            from terrain
-            where region = %s
-            order by grid_row, grid_column, layer
+        select t.grid_column,
+               t.grid_row,
+               t.layer,
+               t.cell_key,
+               t.terrain,
+               t.vegetation,
+               t.slope,
+               t.cell_size_ft,
+               t.time_step_min,
+               t.burn_duration_ticks,
+               t.lat,
+               t.long,
+               t.location,
+               t.region,
+               c.state_group,
+               c.fuel_moisture,
+               c.temperature_c,
+               c.humidity_pct,
+               c.wind_speed_mps,
+               c.wind_direction_deg,
+               c.pressure_hpa
+        from terrain t
+                 join cell_state c
+                      on t.grid_column = c.grid_column and t.grid_row = c.grid_row and t.layer = c.layer and t.region = c.region
+        where t.region = %s
+          and c.state_group = %s
+        order by grid_row, grid_column, layer;
         """
-        params: tuple = (region_name,)
+        params: tuple = (region_name, state_group,)
         if limit is not None:
             sql += " limit %s"
             params = (region_name, limit)
@@ -137,3 +142,4 @@ class TerrainRepository(TerrainRepositoryBase):
             else 0.0,
             pressure_hpa=terrain.pressure_hpa if terrain.pressure_hpa is not None else 1013.0,
         )
+

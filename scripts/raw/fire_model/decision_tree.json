@@ -1,0 +1,212 @@
+{
+  "source": "RMRS-GTR-153",
+  "artifact_type": "fuel_type_selection_decision_tree",
+  "description": "Structured decision tree for selecting a fuel type category (NB, GR, GS, SH, TU, TL, SB) from a cell_state record. Each node specifies the cell_state field to evaluate, the condition, and the resulting branch or conclusion. This tree operates at fuel TYPE level only — sub-model selection within a type requires additional reasoning against the fuel_model_parameters artifact.",
+  "version": "1.0",
+  "cell_state_fields_used": [
+    "vegetaion_cover_evc",
+    "vegtation_greeness_ndvi",
+    "fuel_moisture",
+    "humidity_pct",
+    "temperature_c",
+    "wind_speed_mps",
+    "region",
+    "fire_intensity",
+    "layer"
+  ],
+  "entry_point": "node_001",
+  "nodes": {
+    "node_001": {
+      "description": "Check layer — Rothermel surface fire model applies to surface layer only",
+      "field": "layer",
+      "condition": "layer == 0",
+      "true_branch": "node_002",
+      "false_branch": "conclusion_NOT_APPLICABLE",
+      "note": "Layer > 0 indicates elevated fuel strata. Surface fire spread model does not apply. Crown fire models require separate treatment."
+    },
+    "node_002": {
+      "description": "Check for active fire — if fire_intensity > 0 the cell is burning or recently burned",
+      "field": "fire_intensity",
+      "condition": "fire_intensity > 0",
+      "true_branch": "node_003",
+      "false_branch": "node_004",
+      "note": "Active fire cells still need fuel type classification for spread prediction, but the intensity reading can validate or calibrate the selected fuel model against adjective class thresholds."
+    },
+    "node_003": {
+      "description": "Active fire — proceed with fuel type classification to support spread prediction, but note active fire context",
+      "action": "SET flag: active_fire = true",
+      "next": "node_004",
+      "note": "Classification continues normally. Active fire flag should be passed to the reasoning agent for context."
+    },
+    "node_004": {
+      "description": "Check vegetaion_cover_evc for nonburnable indicators",
+      "field": "vegetaion_cover_evc",
+      "condition": "vegetaion_cover_evc indicates urban development, open water, permanent ice or snow, maintained agricultural land, or bare rock/ground with no vegetative fuel",
+      "true_branch": "conclusion_NB",
+      "false_branch": "node_005",
+      "note": "NB classification rules out all fire behavior modeling. If vegetaion_cover_evc is ambiguous, proceed to node_005 and use additional fields to confirm."
+    },
+    "node_005": {
+      "description": "Check for post-disturbance slash or blowdown conditions",
+      "field": "vegetaion_cover_evc",
+      "condition": "vegetaion_cover_evc indicates post-harvest logging slash, wind blowdown, or heavy tree mortality with large accumulation of dead and down woody debris as the dominant surface fuel",
+      "true_branch": "conclusion_SB",
+      "false_branch": "node_006",
+      "note": "SB applies specifically when the disturbance-created downed fuel is the primary fire carrier, not when dead and down fuel exists as a secondary component under a living canopy."
+    },
+    "node_006": {
+      "description": "Check for forest canopy presence — distinguishes forest from non-forest fuel types",
+      "field": "vegetaion_cover_evc",
+      "condition": "vegetaion_cover_evc indicates closed or semi-closed forest canopy",
+      "true_branch": "node_007",
+      "false_branch": "node_010",
+      "note": "Forest canopy presence routes toward TL or TU depending on understory. Absence routes toward GR, GS, or SH."
+    },
+    "node_007": {
+      "description": "Forest present — check for meaningful understory fuel contribution",
+      "field": "vegetaion_cover_evc",
+      "condition": "vegetaion_cover_evc or vegtation_greeness_ndvi indicates a meaningful understory layer (grass, shrubs, or mixed) that would contribute to fire spread alongside litter",
+      "true_branch": "node_008",
+      "false_branch": "conclusion_TL",
+      "note": "If forest floor litter is the sole surface fuel and live understory is absent or negligible, classify as TL. If understory is present and would carry fire, proceed to TU evaluation."
+    },
+    "node_008": {
+      "description": "Forest with understory — check understory type to differentiate TU variants",
+      "field": "vegetaion_cover_evc",
+      "condition": "understory is primarily herbaceous (grass or forbs) rather than woody shrubs",
+      "true_branch": "node_009",
+      "false_branch": "conclusion_TU_shrub",
+      "note": "Herbaceous understory routes toward dynamic TU models (TU1, TU3). Woody shrub understory routes toward static TU models (TU2, TU5) or TU4 for dwarf conifer."
+    },
+    "node_009": {
+      "description": "Forest with herbaceous understory — check climate for TU sub-type guidance",
+      "field": "region",
+      "condition": "region or humidity_pct indicates arid to semiarid climate",
+      "true_branch": "conclusion_TU_dry_herbaceous",
+      "false_branch": "conclusion_TU_humid_herbaceous",
+      "note": "Dry climate herbaceous understory under forest maps to TU1. Humid climate maps to TU3."
+    },
+    "node_010": {
+      "description": "Non-forest — check shrub coverage dominance",
+      "field": "vegetaion_cover_evc",
+      "condition": "vegetaion_cover_evc indicates shrubs cover at least 50 percent of the site",
+      "true_branch": "conclusion_SH",
+      "false_branch": "node_011",
+      "note": "Shrub dominance at 50% or more with sparse grass routes to SH. Below 50% shrub with meaningful grass routes to GS or GR."
+    },
+    "node_011": {
+      "description": "Non-forest, shrub under 50% — check for meaningful shrub component alongside grass",
+      "field": "vegetaion_cover_evc",
+      "condition": "vegetaion_cover_evc indicates shrubs are present and contribute to fire behavior alongside grass (shrub coverage roughly 10-50%)",
+      "true_branch": "conclusion_GS",
+      "false_branch": "node_012",
+      "note": "Mixed grass-shrub with both components contributing routes to GS. Grass dominant with shrubs absent or negligible routes to GR."
+    },
+    "node_012": {
+      "description": "Non-forest, grass dominant or pure grass — confirm grass as primary fire carrier",
+      "field": "vegetaion_cover_evc",
+      "condition": "vegetaion_cover_evc indicates grass or herbaceous vegetation is the dominant surface fuel",
+      "true_branch": "conclusion_GR",
+      "false_branch": "conclusion_UNCERTAIN",
+      "note": "Pure grass or grass-dominant with negligible shrub routes to GR. If cover type is truly ambiguous, flag for human review or default to the fuel type with lower fire behavior for conservative risk assessment."
+    }
+  },
+  "conclusions": {
+    "conclusion_NB": {
+      "fuel_type": "NB",
+      "label": "Nonburnable",
+      "fire_spread_possible": false,
+      "next_step": "No fire behavior modeling needed. Verify active_fire flag is false. If fire_intensity > 0, investigate data quality.",
+      "risk_guidance": "Zero fire spread risk from surface fuel. Monitor for firebrand spotting in adjacent burnable cells."
+    },
+    "conclusion_GR": {
+      "fuel_type": "GR",
+      "label": "Grass",
+      "fire_spread_possible": true,
+      "dynamic": true,
+      "next_step": "Proceed to sub-model selection within GR using fuel_moisture (dead scenario), vegtation_greeness_ndvi (live scenario and curing), region/humidity_pct (climate regime), and vegetaion_cover_evc (fuel density and depth proxy). Apply dynamic fuel model transfer logic.",
+      "key_risk_factors": ["wind_speed_mps — dominant spread driver", "vegtation_greeness_ndvi — curing state determines live-to-dead herbaceous transfer", "fuel_moisture — dead fuel moisture scenario"],
+      "risk_guidance": "Highest fire behavior potential under fully cured, high-wind, low-moisture conditions. Extreme class possible in GR7, GR8, GR9."
+    },
+    "conclusion_GS": {
+      "fuel_type": "GS",
+      "label": "Grass-Shrub",
+      "fire_spread_possible": true,
+      "dynamic": true,
+      "next_step": "Proceed to sub-model selection within GS using fuel_moisture, vegtation_greeness_ndvi, region/humidity_pct, and vegetaion_cover_evc for shrub height and density. Apply dynamic fuel model transfer logic for herbaceous component.",
+      "key_risk_factors": ["wind_speed_mps", "vegtation_greeness_ndvi", "fuel_moisture", "shrub density from vegetaion_cover_evc"],
+      "risk_guidance": "Very High flame length possible in GS4 under adverse conditions. Climate regime distinguishes dry (GS1/GS2) from humid (GS3/GS4) variants."
+    },
+    "conclusion_SH": {
+      "fuel_type": "SH",
+      "label": "Shrub",
+      "fire_spread_possible": true,
+      "dynamic": "partial — SH1 and SH9 only",
+      "next_step": "Proceed to sub-model selection within SH using fuel_moisture (primary driver for static models), vegetaion_cover_evc for shrub height and density, region/humidity_pct for climate regime. For SH1 and SH9, also apply dynamic fuel model logic using vegtation_greeness_ndvi.",
+      "key_risk_factors": ["fuel_moisture — primary driver for most SH models", "wind_speed_mps", "shrub height and density from vegetaion_cover_evc", "region for climate regime"],
+      "risk_guidance": "Very High flame length possible in SH5, SH7, SH9 under adverse conditions. Heavy tall shrub models are comparable to severe grass fire scenarios."
+    },
+    "conclusion_TU_dry_herbaceous": {
+      "fuel_type": "TU",
+      "label": "Timber-Understory (dry climate, herbaceous understory)",
+      "fire_spread_possible": true,
+      "dynamic": true,
+      "candidate_models": ["TU1"],
+      "next_step": "TU1 is the primary candidate. Apply dynamic fuel model logic using vegtation_greeness_ndvi for herbaceous understory state. fuel_moisture drives dead litter component.",
+      "key_risk_factors": ["fuel_moisture", "vegtation_greeness_ndvi", "wind_speed_mps"],
+      "risk_guidance": "Low spread rate and low flame length in TU1 under most conditions. Primary risk is sustained surface fire providing heat for crown fire initiation."
+    },
+    "conclusion_TU_humid_herbaceous": {
+      "fuel_type": "TU",
+      "label": "Timber-Understory (humid climate, herbaceous understory)",
+      "fire_spread_possible": true,
+      "dynamic": true,
+      "candidate_models": ["TU3"],
+      "next_step": "TU3 is the primary candidate. Apply dynamic fuel model logic. TU3 produces notably higher spread rate than TU2 due to herbaceous component.",
+      "key_risk_factors": ["fuel_moisture", "vegtation_greeness_ndvi", "wind_speed_mps"],
+      "risk_guidance": "High spread rate and moderate flame length possible in TU3 under adverse conditions."
+    },
+    "conclusion_TU_shrub": {
+      "fuel_type": "TU",
+      "label": "Timber-Understory (shrub or dwarf conifer understory)",
+      "fire_spread_possible": true,
+      "dynamic": false,
+      "candidate_models": ["TU2", "TU4", "TU5"],
+      "next_step": "TU4 if dwarf conifer with grass or moss understory and very low extinction moisture. TU2 if moderate load humid climate. TU5 if very high load dry climate with shrub understory. All are static — fuel_moisture is primary behavioral driver.",
+      "key_risk_factors": ["fuel_moisture", "wind_speed_mps", "region"],
+      "risk_guidance": "TU4 notable for very low extinction moisture (12%) — ignites readily. TU5 notable for very high fuel load but moderate behavior due to coarse fuel dominance."
+    },
+    "conclusion_TL": {
+      "fuel_type": "TL",
+      "label": "Timber Litter",
+      "fire_spread_possible": true,
+      "dynamic": false,
+      "next_step": "Proceed to sub-model selection within TL using litter type (needle vs broadleaf from region/species context), fuel load level, and presence of downed logs. fuel_moisture is the sole behavioral driver — all TL models are static.",
+      "key_risk_factors": ["fuel_moisture — sole behavioral driver", "wind_speed_mps — lower responsiveness than grass types"],
+      "risk_guidance": "Low to moderate spread rate and flame length across all TL models. Primary operational risk is crown fire initiation from sustained surface fire — TL surface fire intensity should be evaluated against crown fire initiation thresholds for the overstory."
+    },
+    "conclusion_SB": {
+      "fuel_type": "SB",
+      "label": "Slash-Blowdown",
+      "fire_spread_possible": true,
+      "dynamic": false,
+      "next_step": "Proceed to sub-model selection within SB based on disturbance type (activity fuel vs blowdown), fine fuel load level, and fuelbed arrangement. fuel_moisture is primary behavioral driver — all SB models are static.",
+      "key_risk_factors": ["fuel_moisture — primary driver", "wind_speed_mps", "fuelbed arrangement (compacted vs aerated)"],
+      "risk_guidance": "Very High spread rate and flame length possible in SB4 under adverse conditions. High fuel loads across all SB models mean that once ignited, fire behavior can be severe even at moderate wind speeds."
+    },
+    "conclusion_NOT_APPLICABLE": {
+      "fuel_type": null,
+      "label": "Surface fire model not applicable",
+      "fire_spread_possible": null,
+      "next_step": "Layer > 0. Rothermel surface fire spread model applies to layer 0 only. Crown fire or elevated fuel modeling requires separate treatment outside the scope of RMRS-GTR-153.",
+      "risk_guidance": "Do not apply surface fuel model parameters to non-surface layers."
+    },
+    "conclusion_UNCERTAIN": {
+      "fuel_type": null,
+      "label": "Fuel type uncertain — insufficient signal",
+      "fire_spread_possible": null,
+      "next_step": "vegetaion_cover_evc and supporting fields do not provide sufficient signal for classification. Options: (1) flag for human review, (2) default to the fuel type with lower fire behavior for conservative risk assessment, (3) request additional sensor data for the cell.",
+      "risk_guidance": "Do not assume NB when fuel type is uncertain. Treat as potentially burnable until classification can be confirmed."
+    }
+  }
+}

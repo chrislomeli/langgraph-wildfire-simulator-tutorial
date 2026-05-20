@@ -1,0 +1,120 @@
+{
+  "source": "RMRS-GTR-153",
+  "artifact_type": "fuel_model_parameters",
+  "description": "Complete parameter set for all 40 standard fire behavior fuel models. All fuel load values in tons/acre. SAV ratio in 1/ft. Depth in feet. Extinction moisture and heat content as noted. Dynamic models transfer live herbaceous load to dead based on moisture content.",
+  "constants_all_models": {
+    "dead_10hr_SAV_1_per_ft": 109,
+    "dead_100hr_SAV_1_per_ft": 30,
+    "total_mineral_content_pct": 5.55,
+    "effective_mineral_content_pct": 1.00,
+    "ovendry_particle_density_lb_per_ft3": 32
+  },
+  "fuel_types": {
+    "GR": {
+      "label": "Grass",
+      "primary_fire_carrier": "Grass",
+      "all_dynamic": true,
+      "models": {
+        "GR1": { "number": 101, "name": "Short Sparse Dry Climate Grass",          "dead_1hr": 0.10, "dead_10hr": 0.00, "dead_100hr": 0.00, "live_herb": 0.30, "live_woody": 0.00, "dynamic": true,  "dead_1hr_SAV": 2200, "live_herb_SAV": 2000, "live_woody_SAV": null, "depth_ft": 0.4, "extinction_moisture_pct": 15, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 0.40,  "char_SAV": 2054, "packing_ratio": 0.00143 },
+        "GR2": { "number": 102, "name": "Low Load Dry Climate Grass",              "dead_1hr": 0.10, "dead_10hr": 0.00, "dead_100hr": 0.00, "live_herb": 1.00, "live_woody": 0.00, "dynamic": true,  "dead_1hr_SAV": 2000, "live_herb_SAV": 1800, "live_woody_SAV": null, "depth_ft": 1.0, "extinction_moisture_pct": 15, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 1.10,  "char_SAV": 1820, "packing_ratio": 0.00158 },
+        "GR3": { "number": 103, "name": "Low Load Very Coarse Humid Climate Grass", "dead_1hr": 0.10, "dead_10hr": 0.40, "dead_100hr": 0.00, "live_herb": 1.50, "live_woody": 0.00, "dynamic": true,  "dead_1hr_SAV": 1500, "live_herb_SAV": 1300, "live_woody_SAV": null, "depth_ft": 2.0, "extinction_moisture_pct": 30, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 1.60,  "char_SAV": 1290, "packing_ratio": 0.00143 },
+        "GR4": { "number": 104, "name": "Moderate Load Dry Climate Grass",         "dead_1hr": 0.25, "dead_10hr": 0.00, "dead_100hr": 0.00, "live_herb": 1.90, "live_woody": 0.00, "dynamic": true,  "dead_1hr_SAV": 2000, "live_herb_SAV": 1800, "live_woody_SAV": null, "depth_ft": 2.0, "extinction_moisture_pct": 15, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 2.15,  "char_SAV": 1826, "packing_ratio": 0.00154 },
+        "GR5": { "number": 105, "name": "Low Load Humid Climate Grass",            "dead_1hr": 0.40, "dead_10hr": 0.00, "dead_100hr": 0.00, "live_herb": 2.50, "live_woody": 0.00, "dynamic": true,  "dead_1hr_SAV": 1800, "live_herb_SAV": 1600, "live_woody_SAV": null, "depth_ft": 1.5, "extinction_moisture_pct": 40, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 2.90,  "char_SAV": 1631, "packing_ratio": 0.00277 },
+        "GR6": { "number": 106, "name": "Moderate Load Humid Climate Grass",       "dead_1hr": 0.10, "dead_10hr": 0.00, "dead_100hr": 0.00, "live_herb": 3.40, "live_woody": 0.00, "dynamic": true,  "dead_1hr_SAV": 2200, "live_herb_SAV": 2000, "live_woody_SAV": null, "depth_ft": 1.5, "extinction_moisture_pct": 40, "heat_content_BTU_per_lb": 9000, "fine_fuel_load_t_per_ac": 3.50,  "char_SAV": 2006, "packing_ratio": 0.00335 },
+        "GR7": { "number": 107, "name": "High Load Dry Climate Grass",             "dead_1hr": 1.00, "dead_10hr": 0.00, "dead_100hr": 0.00, "live_herb": 5.40, "live_woody": 0.00, "dynamic": true,  "dead_1hr_SAV": 2000, "live_herb_SAV": 1800, "live_woody_SAV": null, "depth_ft": 3.0, "extinction_moisture_pct": 15, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 6.40,  "char_SAV": 1834, "packing_ratio": 0.00306 },
+        "GR8": { "number": 108, "name": "High Load Very Coarse Humid Climate Grass","dead_1hr": 0.50, "dead_10hr": 1.00, "dead_100hr": 0.00, "live_herb": 7.30, "live_woody": 0.00, "dynamic": true,  "dead_1hr_SAV": 1500, "live_herb_SAV": 1300, "live_woody_SAV": null, "depth_ft": 4.0, "extinction_moisture_pct": 30, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 7.80,  "char_SAV": 1302, "packing_ratio": 0.00316 },
+        "GR9": { "number": 109, "name": "Very High Load Humid Climate Grass",      "dead_1hr": 1.00, "dead_10hr": 1.00, "dead_100hr": 0.00, "live_herb": 9.00, "live_woody": 0.00, "dynamic": true,  "dead_1hr_SAV": 1800, "live_herb_SAV": 1600, "live_woody_SAV": null, "depth_ft": 5.0, "extinction_moisture_pct": 40, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 10.00, "char_SAV": 1612, "packing_ratio": 0.00316 }
+      }
+    },
+    "GS": {
+      "label": "Grass-Shrub",
+      "primary_fire_carrier": "Grass and shrubs combined — both components matter",
+      "all_dynamic": true,
+      "models": {
+        "GS1": { "number": 121, "name": "Low Load Dry Climate Grass-Shrub",          "dead_1hr": 0.20, "dead_10hr": 0.00, "dead_100hr": 0.00, "live_herb": 0.50, "live_woody": 0.65, "dynamic": true,  "dead_1hr_SAV": 2000, "live_herb_SAV": 1800, "live_woody_SAV": 1800, "depth_ft": 0.9, "extinction_moisture_pct": 15, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 1.35, "char_SAV": 1832, "packing_ratio": 0.00215 },
+        "GS2": { "number": 122, "name": "Moderate Load Dry Climate Grass-Shrub",     "dead_1hr": 0.50, "dead_10hr": 0.50, "dead_100hr": 0.00, "live_herb": 0.60, "live_woody": 1.00, "dynamic": true,  "dead_1hr_SAV": 2000, "live_herb_SAV": 1800, "live_woody_SAV": 1800, "depth_ft": 1.5, "extinction_moisture_pct": 15, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 2.10, "char_SAV": 1827, "packing_ratio": 0.00249 },
+        "GS3": { "number": 123, "name": "Moderate Load Humid Climate Grass-Shrub",   "dead_1hr": 0.30, "dead_10hr": 0.25, "dead_100hr": 0.00, "live_herb": 1.45, "live_woody": 1.25, "dynamic": true,  "dead_1hr_SAV": 1800, "live_herb_SAV": 1600, "live_woody_SAV": 1600, "depth_ft": 1.8, "extinction_moisture_pct": 40, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 3.00, "char_SAV": 1614, "packing_ratio": 0.00259 },
+        "GS4": { "number": 124, "name": "High Load Humid Climate Grass-Shrub",       "dead_1hr": 1.90, "dead_10hr": 0.30, "dead_100hr": 0.10, "live_herb": 3.40, "live_woody": 7.10, "dynamic": true,  "dead_1hr_SAV": 1800, "live_herb_SAV": 1600, "live_woody_SAV": 1600, "depth_ft": 2.1, "extinction_moisture_pct": 40, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 12.40,"char_SAV": 1674, "packing_ratio": 0.00874 }
+      }
+    },
+    "SH": {
+      "label": "Shrub",
+      "primary_fire_carrier": "Live and dead shrub twigs and foliage combined with dead and down shrub litter",
+      "all_dynamic": false,
+      "notes": "SH1 and SH9 are dynamic; all others are static",
+      "models": {
+        "SH1": { "number": 141, "name": "Low Load Dry Climate Shrub",              "dead_1hr": 0.25, "dead_10hr": 0.25, "dead_100hr": 0.00, "live_herb": 0.15, "live_woody": 1.30, "dynamic": true,  "dead_1hr_SAV": 2000, "live_herb_SAV": 1800, "live_woody_SAV": 1600, "depth_ft": 1.0, "extinction_moisture_pct": 15, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 1.70,  "char_SAV": 1674, "packing_ratio": 0.00280 },
+        "SH2": { "number": 142, "name": "Moderate Load Dry Climate Shrub",         "dead_1hr": 1.35, "dead_10hr": 2.40, "dead_100hr": 0.75, "live_herb": 0.00, "live_woody": 3.85, "dynamic": false, "dead_1hr_SAV": 2000, "live_herb_SAV": null, "live_woody_SAV": 1600, "depth_ft": 1.0, "extinction_moisture_pct": 15, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 5.20,  "char_SAV": 1672, "packing_ratio": 0.01198 },
+        "SH3": { "number": 143, "name": "Moderate Load Humid Climate Shrub",       "dead_1hr": 0.45, "dead_10hr": 3.00, "dead_100hr": 0.00, "live_herb": 0.00, "live_woody": 6.20, "dynamic": false, "dead_1hr_SAV": 1600, "live_herb_SAV": null, "live_woody_SAV": 1400, "depth_ft": 2.4, "extinction_moisture_pct": 40, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 6.65,  "char_SAV": 1371, "packing_ratio": 0.00577 },
+        "SH4": { "number": 144, "name": "Low Load Humid Climate Timber-Shrub",     "dead_1hr": 0.85, "dead_10hr": 1.15, "dead_100hr": 0.20, "live_herb": 0.00, "live_woody": 2.55, "dynamic": false, "dead_1hr_SAV": 2000, "live_herb_SAV": 1800, "live_woody_SAV": 1600, "depth_ft": 3.0, "extinction_moisture_pct": 30, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 3.40,  "char_SAV": 1682, "packing_ratio": 0.00227 },
+        "SH5": { "number": 145, "name": "High Load Dry Climate Shrub",             "dead_1hr": 3.60, "dead_10hr": 2.10, "dead_100hr": 0.00, "live_herb": 0.00, "live_woody": 2.90, "dynamic": false, "dead_1hr_SAV": 750,  "live_herb_SAV": null, "live_woody_SAV": 1600, "depth_ft": 6.0, "extinction_moisture_pct": 15, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 6.50,  "char_SAV": 1252, "packing_ratio": 0.00206 },
+        "SH6": { "number": 146, "name": "Low Load Humid Climate Shrub",            "dead_1hr": 2.90, "dead_10hr": 1.45, "dead_100hr": 0.00, "live_herb": 0.00, "live_woody": 1.40, "dynamic": false, "dead_1hr_SAV": 750,  "live_herb_SAV": null, "live_woody_SAV": 1600, "depth_ft": 2.0, "extinction_moisture_pct": 30, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 4.30,  "char_SAV": 1144, "packing_ratio": 0.00412 },
+        "SH7": { "number": 147, "name": "Very High Load Dry Climate Shrub",        "dead_1hr": 3.50, "dead_10hr": 5.30, "dead_100hr": 2.20, "live_herb": 0.00, "live_woody": 3.40, "dynamic": false, "dead_1hr_SAV": 750,  "live_herb_SAV": null, "live_woody_SAV": 1600, "depth_ft": 6.0, "extinction_moisture_pct": 15, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 6.90,  "char_SAV": 1233, "packing_ratio": 0.00344 },
+        "SH8": { "number": 148, "name": "High Load Humid Climate Shrub",           "dead_1hr": 2.05, "dead_10hr": 3.40, "dead_100hr": 0.85, "live_herb": 0.00, "live_woody": 4.35, "dynamic": false, "dead_1hr_SAV": 750,  "live_herb_SAV": null, "live_woody_SAV": 1600, "depth_ft": 3.0, "extinction_moisture_pct": 40, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 6.40,  "char_SAV": 1386, "packing_ratio": 0.00509 },
+        "SH9": { "number": 149, "name": "Very High Load Humid Climate Shrub",      "dead_1hr": 4.50, "dead_10hr": 2.45, "dead_100hr": 0.00, "live_herb": 1.55, "live_woody": 7.00, "dynamic": true,  "dead_1hr_SAV": 750,  "live_herb_SAV": 1800, "live_woody_SAV": 1500, "depth_ft": 4.4, "extinction_moisture_pct": 40, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 13.05, "char_SAV": 1378, "packing_ratio": 0.00505 }
+      }
+    },
+    "TU": {
+      "label": "Timber-Understory",
+      "primary_fire_carrier": "Forest litter combined with herbaceous or shrub fuels",
+      "all_dynamic": false,
+      "notes": "TU1 and TU3 are dynamic; others are static",
+      "models": {
+        "TU1": { "number": 161, "name": "Low Load Dry Climate Timber-Grass-Shrub",        "dead_1hr": 0.20, "dead_10hr": 0.90, "dead_100hr": 1.50, "live_herb": 0.20, "live_woody": 0.90, "dynamic": true,  "dead_1hr_SAV": 2000, "live_herb_SAV": 1800, "live_woody_SAV": 1600, "depth_ft": 0.6, "extinction_moisture_pct": 20, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 1.30, "char_SAV": 1606, "packing_ratio": 0.00885 },
+        "TU2": { "number": 162, "name": "Moderate Load Humid Climate Timber-Shrub",       "dead_1hr": 0.95, "dead_10hr": 1.80, "dead_100hr": 1.25, "live_herb": 0.00, "live_woody": 0.20, "dynamic": false, "dead_1hr_SAV": 2000, "live_herb_SAV": null, "live_woody_SAV": 1600, "depth_ft": 1.0, "extinction_moisture_pct": 30, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 1.15, "char_SAV": 1767, "packing_ratio": 0.00603 },
+        "TU3": { "number": 163, "name": "Moderate Load Humid Climate Timber-Grass-Shrub", "dead_1hr": 1.10, "dead_10hr": 0.15, "dead_100hr": 0.25, "live_herb": 0.65, "live_woody": 1.10, "dynamic": true,  "dead_1hr_SAV": 1800, "live_herb_SAV": 1600, "live_woody_SAV": 1400, "depth_ft": 1.3, "extinction_moisture_pct": 30, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 2.85, "char_SAV": 1611, "packing_ratio": 0.00359 },
+        "TU4": { "number": 164, "name": "Dwarf Conifer With Understory",                  "dead_1hr": 4.50, "dead_10hr": 0.00, "dead_100hr": 0.00, "live_herb": 0.00, "live_woody": 2.00, "dynamic": false, "dead_1hr_SAV": 2300, "live_herb_SAV": null, "live_woody_SAV": 2000, "depth_ft": 0.5, "extinction_moisture_pct": 12, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 6.50, "char_SAV": 2216, "packing_ratio": 0.01865 },
+        "TU5": { "number": 165, "name": "Very High Load Dry Climate Timber-Shrub",        "dead_1hr": 4.00, "dead_10hr": 4.00, "dead_100hr": 3.00, "live_herb": 0.00, "live_woody": 3.00, "dynamic": false, "dead_1hr_SAV": 1500, "live_herb_SAV": null, "live_woody_SAV": 750,  "depth_ft": 1.0, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 7.00, "char_SAV": 1224, "packing_ratio": 0.02009 }
+      }
+    },
+    "TL": {
+      "label": "Timber Litter",
+      "primary_fire_carrier": "Dead and down woody fuel; live fuel has little effect",
+      "all_dynamic": false,
+      "models": {
+        "TL1": { "number": 181, "name": "Low Load Compact Conifer Litter",   "dead_1hr": 1.00, "dead_10hr": 2.20, "dead_100hr": 3.60, "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 0.2, "extinction_moisture_pct": 30, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 1.00, "char_SAV": 1716, "packing_ratio": 0.04878 },
+        "TL2": { "number": 182, "name": "Low Load Broadleaf Litter",         "dead_1hr": 1.40, "dead_10hr": 2.30, "dead_100hr": 2.20, "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 0.2, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 1.40, "char_SAV": 1806, "packing_ratio": 0.04232 },
+        "TL3": { "number": 183, "name": "Moderate Load Conifer Litter",      "dead_1hr": 0.50, "dead_10hr": 2.20, "dead_100hr": 2.80, "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 0.3, "extinction_moisture_pct": 20, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 0.50, "char_SAV": 1532, "packing_ratio": 0.02630 },
+        "TL4": { "number": 184, "name": "Small Downed Logs",                 "dead_1hr": 0.50, "dead_10hr": 1.50, "dead_100hr": 4.20, "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 0.4, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 0.50, "char_SAV": 1568, "packing_ratio": 0.02224 },
+        "TL5": { "number": 185, "name": "High Load Conifer Litter",          "dead_1hr": 1.15, "dead_10hr": 2.50, "dead_100hr": 4.40, "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 0.6, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 1.15, "char_SAV": 1713, "packing_ratio": 0.01925 },
+        "TL6": { "number": 186, "name": "Moderate Load Broadleaf Litter",    "dead_1hr": 2.40, "dead_10hr": 1.20, "dead_100hr": 1.20, "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 0.3, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 2.40, "char_SAV": 1936, "packing_ratio": 0.02296 },
+        "TL7": { "number": 187, "name": "Large Downed Logs",                 "dead_1hr": 0.30, "dead_10hr": 1.40, "dead_100hr": 8.10, "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 0.4, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 0.30, "char_SAV": 1229, "packing_ratio": 0.03515 },
+        "TL8": { "number": 188, "name": "Long-Needle Litter",                "dead_1hr": 5.80, "dead_10hr": 1.40, "dead_100hr": 1.10, "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 1800, "depth_ft": 0.3, "extinction_moisture_pct": 35, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 5.80, "char_SAV": 1770, "packing_ratio": 0.03969 },
+        "TL9": { "number": 189, "name": "Very High Load Broadleaf Litter",   "dead_1hr": 6.65, "dead_10hr": 3.30, "dead_100hr": 4.15, "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 1800, "depth_ft": 0.6, "extinction_moisture_pct": 35, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 6.65, "char_SAV": 1733, "packing_ratio": 0.03372 }
+      }
+    },
+    "SB": {
+      "label": "Slash-Blowdown",
+      "primary_fire_carrier": "Activity fuel or blowdown debris; includes areas of heavy forest mortality",
+      "all_dynamic": false,
+      "models": {
+        "SB1": { "number": 201, "name": "Low Load Activity Fuel",                          "dead_1hr": 1.50, "dead_10hr": 3.00, "dead_100hr": 11.00, "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 1.0, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 1.50, "char_SAV": 1653, "packing_ratio": 0.02224 },
+        "SB2": { "number": 202, "name": "Moderate Load Activity Fuel or Low Load Blowdown", "dead_1hr": 4.50, "dead_10hr": 4.25, "dead_100hr": 4.00,  "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 1.0, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 4.50, "char_SAV": 1884, "packing_ratio": 0.01829 },
+        "SB3": { "number": 203, "name": "High Load Activity Fuel or Moderate Load Blowdown","dead_1hr": 5.50, "dead_10hr": 2.75, "dead_100hr": 3.00,  "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 1.2, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 5.50, "char_SAV": 1935, "packing_ratio": 0.01345 },
+        "SB4": { "number": 204, "name": "High Load Blowdown",                              "dead_1hr": 5.25, "dead_10hr": 3.50, "dead_100hr": 5.25,  "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 2.7, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 5.25, "char_SAV": 1907, "packing_ratio": 0.00744 }
+      }
+    },
+    "URB": {
+      "label": "Slash-Blowdown",
+      "primary_fire_carrier": "Activity fuel or blowdown debris; includes areas of heavy forest mortality",
+      "all_dynamic": false,
+      "models": {
+        "URB-LOW": { "number": 501, "name": "Low Load Activity Fuel",                          "dead_1hr": 1.50, "dead_10hr": 3.00, "dead_100hr": 11.00, "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 1.0, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 1.50, "char_SAV": 1653, "packing_ratio": 0.02224 },
+        "URB-MED": { "number": 502, "name": "Moderate Load Activity Fuel or Low Load Blowdown", "dead_1hr": 4.50, "dead_10hr": 4.25, "dead_100hr": 4.00,  "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 1.0, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 4.50, "char_SAV": 1884, "packing_ratio": 0.01829 },
+        "URB-HIGH": { "number": 503, "name": "High Load Activity Fuel or Moderate Load Blowdown","dead_1hr": 5.50, "dead_10hr": 2.75, "dead_100hr": 3.00,  "live_herb": 0.00, "live_woody": 0.00, "dynamic": false, "dead_1hr_SAV": 2000, "depth_ft": 1.2, "extinction_moisture_pct": 25, "heat_content_BTU_per_lb": 8000, "fine_fuel_load_t_per_ac": 5.50, "char_SAV": 1935, "packing_ratio": 0.01345 }
+      }
+    },
+    "NB": {
+      "label": "Nonburnable",
+      "primary_fire_carrier": "None — insufficient wildland fuel to carry fire under any condition",
+      "all_dynamic": false,
+      "models": {
+        "NB1": { "number": 91,  "name": "Urban/Developed",  "fire_spread": false, "notes": "Structure ignition possible via house-to-house or firebrand, but not modeled by fire behavior fuel models. Use a vegetative fuel model if sufficient fuel surrounds structures." },
+        "NB2": { "number": 92,  "name": "Snow/Ice",         "fire_spread": false, "notes": "Permanent or seasonal snow cover. Areas with seasonal snow may carry two fuel model designations." },
+        "NB3": { "number": 93,  "name": "Agricultural",     "fire_spread": false, "notes": "Maintained nonburnable condition only. Crops allowed to cure before harvest or grass under orchards should use an appropriate vegetative fuel model." },
+        "NB8": { "number": 98,  "name": "Open Water",       "fire_spread": false, "notes": "Lakes, rivers, oceans." },
+        "NB9": { "number": 99,  "name": "Bare Ground",      "fire_spread": false, "notes": "Gravel pits, arid deserts, sand dunes, rock outcroppings, beaches." }
+      }
+    }
+  }
+}
