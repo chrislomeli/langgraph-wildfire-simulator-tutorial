@@ -42,7 +42,8 @@
     },
     "wind_direction_deg": {
       "document_concept": "Fire spread direction",
-      "reasoning_guidance": "Used to determine headfire direction relative to fuel layout. Not a fuel model parameter per se, but critical for operational fire spread prediction. Combined with slope aspect, determines upslope/wind alignment scenarios."
+      "reasoning_guidance": "Used to determine headfire direction relative to fuel layout. Not a fuel model parameter per se, but critical for operational fire spread prediction. Combined with slope aspect, determines upslope/wind alignment scenarios.",
+      "wind_direction_interpretation" : "Wind direction is meteorological (wind comes from the stated bearing, clockwise from North). Fire spreads opposite: bearing + 180° mod 360°. Western longitudes are negative — \"more west\" means more negative. Example: 90° reading at POINT(-118.541837, 34.286735) → wind from East → fire spreads West → toward lower (more negative) longitudes "
     },
     "fire_intensity": {
       "document_concept": "Observed or modeled flame length / fireline intensity",

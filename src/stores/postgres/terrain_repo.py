@@ -53,6 +53,7 @@ class TerrainRepository(TerrainRepositoryBase):
                t.grid_row,
                t.layer,
                t.cell_key,
+               t.terrain_type,
                t.terrain,
                t.vegetation,
                t.slope,
@@ -69,7 +70,8 @@ class TerrainRepository(TerrainRepositoryBase):
                c.humidity_pct,
                c.wind_speed_mps,
                c.wind_direction_deg,
-               c.pressure_hpa
+               c.pressure_hpa,
+               c.vegetation_ndvi
         from terrain t
                  join cell_state c
                       on t.grid_column = c.grid_column and t.grid_row = c.grid_row and t.layer = c.layer and t.region = c.region

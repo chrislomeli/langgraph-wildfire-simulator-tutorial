@@ -97,7 +97,6 @@ class TerrainState(BaseModel):
     layer: int | None = None
     region: str | None = None
     state_group: str | None = None
-
     # Per-cell weather seed (initial conditions at tick 0)
     fuel_moisture: float | None = None
     temperature_c: float | None = None
@@ -105,7 +104,7 @@ class TerrainState(BaseModel):
     wind_speed_mps: float | None = None
     wind_direction_deg: float | None = None
     pressure_hpa: float | None = None
-
+    vegetation_ndvi: float | None = None
 
 
 class Terrain(TerrainState):
@@ -114,6 +113,7 @@ class Terrain(TerrainState):
 
     cell_key: str | None = None
     terrain: str | None = None
+    terrain_type: str | None = None
     vegetation: float | None = None
     slope: float | None = None
     cell_size_ft: int | None = None

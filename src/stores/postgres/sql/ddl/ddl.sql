@@ -1,8 +1,6 @@
 create table resources
 (
-    resource_id            integer not null
-        constraint resources_pk
-            primary key,
+    resource_id            integer not null,
     source_file            varchar(30),
     agency                 varchar(60),
     cal_file_unit          varchar(30),
@@ -26,26 +24,22 @@ create table resources
     lat                    double precision,
     long                   double precision,
     notes                  text,
-    location               geography(Point, 4326)
+    location               geography(Point, 4326),
+    constraint resources_pk
+        primary key (resource_id)
 );
-
-alter table resources
-    owner to chrislomeli;
 
 create table spatial_ref_sys
 (
-    srid      integer not null
-        primary key
-        constraint spatial_ref_sys_srid_check
-            check ((srid > 0) AND (srid <= 998999)),
+    srid      integer not null,
     auth_name varchar(256),
     auth_srid integer,
     srtext    varchar(2048),
-    proj4text varchar(2048)
+    proj4text varchar(2048),
+    primary key (srid),
+    constraint spatial_ref_sys_srid_check
+        check ((srid > 0) AND (srid <= 998999))
 );
-
-alter table spatial_ref_sys
-    owner to chrislomeli;
 
 grant select on spatial_ref_sys to public;
 
@@ -65,32 +59,36 @@ create table terrain
     long                double precision,
     location            geography(Point, 4326),
     region              varchar(60),
+    terrain_type        varchar(20),
+    property_stake      varchar(10) default 'none'::character varying not null,
+    life_stake          varchar(10) default 'none'::character varying not null,
+    stake_notes         text,
     constraint terrain_pk
-        unique (grid_column, grid_row)
+        unique (grid_column, grid_row),
+    constraint terrain_property_stake_ck
+        check ((property_stake)::text = ANY
+               ((ARRAY ['none'::character varying, 'low'::character varying, 'moderate'::character varying, 'high'::character varying])::text[])),
+    constraint terrain_life_stake_ck
+        check ((life_stake)::text = ANY
+               ((ARRAY ['none'::character varying, 'low'::character varying, 'moderate'::character varying, 'high'::character varying])::text[]))
 );
-
-alter table terrain
-    owner to chrislomeli;
 
 create table sensors
 (
     grid_row    integer,
     grid_column integer,
     elevation   integer,
-    sensor_id   varchar(60) not null
-        constraint sensors_pk
-            primary key,
+    sensor_id   varchar(60) not null,
     sensor_type varchar(30),
     cluster_id  varchar(60),
     noise_std   double precision,
     lat         double precision,
     long        double precision,
     location    geography(Point, 4326),
-    region      varchar(60)
+    region      varchar(60),
+    constraint sensors_pk
+        primary key (sensor_id)
 );
-
-alter table sensors
-    owner to chrislomeli;
 
 create table wildfire_activity
 (
@@ -116,9 +114,6 @@ create table wildfire_activity
     origin_ownership     varchar(60)
 );
 
-alter table wildfire_activity
-    owner to chrislomeli;
-
 create table resource_assignments
 (
     resource_id            integer,
@@ -129,9 +124,6 @@ create table resource_assignments
 );
 
 comment on column resource_assignments.commitment_start_days is 'days since committment started - for simulation backdate this many days to get s start date';
-
-alter table resource_assignments
-    owner to chrislomeli;
 
 create table current_fires
 (
@@ -160,31 +152,25 @@ create table current_fires
     fire_id             integer
 );
 
-alter table current_fires
-    owner to chrislomeli;
-
 create table resource_advisories
 (
-    id                   uuid                                      not null
-        primary key,
+    id                   uuid                                      not null,
     created_at           timestamp with time zone                  not null,
-    status               varchar default 'SENT'::character varying not null
-        constraint resource_advisories_status_check
-            check ((status)::text = ANY
-                   ((ARRAY ['SENT'::character varying, 'SUPPRESSED'::character varying, 'ACKNOWLEDGED'::character varying])::text[])),
+    status               varchar default 'SENT'::character varying not null,
     epicenter_row        integer                                   not null,
     epicenter_column     integer                                   not null,
     location_description varchar                                   not null,
     situation            text                                      not null,
-    urgency_level        integer                                   not null
-        constraint valid_urgency
-            check ((urgency_level >= 1) AND (urgency_level <= 4)),
+    urgency_level        integer                                   not null,
     notes                text                                      not null,
-    recommendation       text                                      not null
+    recommendation       text                                      not null,
+    primary key (id),
+    constraint resource_advisories_status_check
+        check ((status)::text = ANY
+               ((ARRAY ['SENT'::character varying, 'SUPPRESSED'::character varying, 'ACKNOWLEDGED'::character varying])::text[])),
+    constraint valid_urgency
+        check ((urgency_level >= 1) AND (urgency_level <= 4))
 );
-
-alter table resource_advisories
-    owner to chrislomeli;
 
 create index idx_resource_advisories_guardrail
     on resource_advisories (epicenter_row, epicenter_column, status, created_at);
@@ -202,75 +188,133 @@ create table cell_state
     pressure_hpa       real,
     fuel_moisture      double precision,
     fire_intensity     double precision default 0 not null,
-    risk_score         integer          default 0 not null,
-    confidence         integer          default 0 not null,
     region             varchar(60),
+    vegetation_ndvi    double precision,
     constraint cell_state_pk
         unique (state_group, grid_row, grid_column, layer, region)
 );
 
-alter table cell_state
-    owner to chrislomeli;
+comment on column cell_state.vegetation_ndvi is ' < 0     | water/cloud/snow/invalid  :: 0.0–0.1 | bare ground / rock  :: 0.1–0.3 | sparse vegetation :: 0.3–0.5 | moderate vegetation   :: 0.5–0.8 | dense healthy vegetation  ::| > 0.8   | extremely lush vegetation | ';
 
+create table cell_escalation
+(
+    state_group      varchar(40)                            not null,
+    grid_row         integer                                not null,
+    grid_column      integer                                not null,
+    layer            integer                  default 0     not null,
+    region           varchar(60)                            not null,
+    tick             integer                                not null,
+    escalate         boolean                                not null,
+    confidence       integer                                not null,
+    property_at_risk varchar(10)                            not null,
+    life_at_risk     varchar(10)                            not null,
+    rationale        text                                   not null,
+    created_at       timestamp with time zone default now() not null,
+    constraint cell_escalation_pk
+        unique (state_group, region, grid_row, grid_column, layer, tick),
+    constraint cell_escalation_confidence_ck
+        check ((confidence >= 1) AND (confidence <= 10)),
+    constraint cell_escalation_property_ck
+        check ((property_at_risk)::text = ANY
+               ((ARRAY ['none'::character varying, 'low'::character varying, 'moderate'::character varying, 'high'::character varying])::text[])),
+    constraint cell_escalation_life_ck
+        check ((life_at_risk)::text = ANY
+               ((ARRAY ['none'::character varying, 'low'::character varying, 'moderate'::character varying, 'high'::character varying])::text[]))
+);
+
+create index idx_cell_escalation_lookup
+    on cell_escalation (region, tick, escalate);
+
+create table scenarios
+(
+    scenario_id   serial,
+    name          varchar(120)                           not null,
+    description   text,
+    version       integer                  default 1     not null,
+    region        varchar(60)                            not null,
+    horizon_ticks integer                                not null,
+    created_at    timestamp with time zone default now() not null,
+    primary key (scenario_id),
+    constraint scenarios_name_version_uk
+        unique (name, version)
+);
 
 create table scenario_cell_plan
 (
-    region         varchar(60)                  not null,
-    grid_row       integer                      not null,
-    grid_column    integer                      not null,
-    layer          integer     default 0        not null,
-    metric         varchar(20)                  not null,
-    start_tick     integer     default 0        not null,
-    duration_ticks integer                      not null,
+    region         varchar(60)       not null,
+    grid_row       integer           not null,
+    grid_column    integer           not null,
+    layer          integer default 0 not null,
+    metric         varchar(20)       not null,
+    start_tick     integer default 0 not null,
+    duration_ticks integer           not null,
     start_value    real,
-    target_value   real                         not null,
-    curve          varchar(12) default 'linear' not null,
-    hold_after     boolean     default true     not null,
+    target_value   real              not null,
+    scenario_id    integer,
     constraint scenario_cell_plan_pk
-        unique (region, grid_row, grid_column, layer, metric, start_tick),
-    constraint scp_metric_ck
-        check (metric in ('temperature_c', 'humidity_pct', 'wind_speed_mps',
-                          'wind_direction_deg', 'pressure_hpa', 'fuel_moisture')),
-    constraint scp_curve_ck
-        check (curve in ('linear', 'ease_in', 'ease_out', 'step')),
+        unique (scenario_id, grid_row, grid_column, layer, metric, start_tick),
+    foreign key (scenario_id) references scenarios,
     constraint scp_dur_ck
-        check (duration_ticks >= 1)
+        check (duration_ticks >= 1),
+    constraint scp_metric_ck
+        check ((metric)::text = ANY
+               (ARRAY [('temperature_c'::character varying)::text, ('humidity_pct'::character varying)::text, ('wind_speed_mps'::character varying)::text, ('wind_direction_deg'::character varying)::text, ('pressure_hpa'::character varying)::text, ('fuel_moisture'::character varying)::text, ('vegetation_ndvi'::character varying)::text]))
 );
 
-alter table scenario_cell_plan
-    owner to chrislomeli;
+create table expected_escalation
+(
+    scenario_id               integer                      not null,
+    grid_row                  integer                      not null,
+    grid_column               integer                      not null,
+    layer                     integer default 0            not null,
+    expected_escalate         boolean                      not null,
+    expected_property_at_risk varchar(10)                  not null,
+    expected_life_at_risk     varchar(10)                  not null,
+    rationale_keywords        text[]  default '{}'::text[] not null,
+    notes                     text,
+    constraint expected_escalation_pk
+        unique (scenario_id, grid_row, grid_column, layer),
+    foreign key (scenario_id) references scenarios,
+    constraint expected_escalation_property_ck
+        check ((expected_property_at_risk)::text = ANY
+               ((ARRAY ['none'::character varying, 'low'::character varying, 'moderate'::character varying, 'high'::character varying])::text[])),
+    constraint expected_escalation_life_ck
+        check ((expected_life_at_risk)::text = ANY
+               ((ARRAY ['none'::character varying, 'low'::character varying, 'moderate'::character varying, 'high'::character varying])::text[]))
+);
 
+create table eval_runs
+(
+    eval_run_id    serial,
+    scenario_id    integer                  not null,
+    model_label    varchar(60)              not null,
+    prompt_version varchar(30)              not null,
+    started_at     timestamp with time zone not null,
+    finished_at    timestamp with time zone,
+    pass_count     integer,
+    fail_count     integer,
+    notes          text,
+    primary key (eval_run_id),
+    foreign key (scenario_id) references scenarios
+);
 
-create view v_cell_plan as
-select cs.region,
-       cs.grid_row,
-       cs.grid_column,
-       cs.layer,
-       cs.temperature_c,
-       cs.humidity_pct,
-       cs.wind_speed_mps,
-       cs.fuel_moisture,
-       coalesce(
-               json_agg(
-               json_build_object(
-                       'metric', p.metric,
-                       'start_tick', p.start_tick,
-                       'duration_ticks', p.duration_ticks,
-                       'start_value', p.start_value,
-                       'target_value', p.target_value,
-                       'curve', p.curve,
-                       'hold_after', p.hold_after
-                   ) order by p.metric, p.start_tick
-                       ) filter (where p.metric is not null),
-               '[]'
-       ) as plan
-from cell_state cs
-         left join scenario_cell_plan p
-                   on p.region = cs.region
-                       and p.grid_row = cs.grid_row
-                       and p.grid_column = cs.grid_column
-                       and p.layer = cs.layer
-where cs.state_group = 'seed'
-group by cs.region, cs.grid_row, cs.grid_column, cs.layer,
-         cs.temperature_c, cs.humidity_pct, cs.wind_speed_mps, cs.fuel_moisture;
+create table eval_results
+(
+    eval_run_id             integer           not null,
+    grid_row                integer           not null,
+    grid_column             integer           not null,
+    layer                   integer default 0 not null,
+    actual_escalate         boolean           not null,
+    actual_confidence       integer           not null,
+    actual_property_at_risk varchar(10)       not null,
+    actual_life_at_risk     varchar(10)       not null,
+    actual_rationale        text              not null,
+    passed                  boolean           not null,
+    escalate_match          boolean           not null,
+    property_distance       integer           not null,
+    life_distance           integer           not null,
+    constraint eval_results_pk
+        unique (eval_run_id, grid_row, grid_column, layer),
+    foreign key (eval_run_id) references eval_runs
+);
 
