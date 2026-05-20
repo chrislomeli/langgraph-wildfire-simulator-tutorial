@@ -50,6 +50,7 @@ from tools.advisory import dispatch_advisory
 from world import GenericWorldEngine, TerrainType, FireState, Direction, SECTOR_VECTORS, HotspotSectors, trace_sector, \
     analyze_sector
 from world.cell_state import GenericCell
+from world.world_view import WorldView
 
 logger = logging.getLogger(__name__)
 
@@ -63,36 +64,33 @@ STUB_LOGISTICS = False
 
 
 def make_sector_analysis_node(
-    world_engine: GenericWorldEngine,
+    world: WorldView,
     risk_threshold: int = 5,
     max_sector_miles: float = 20.0,
     risk_view: RiskView | None = None,
 ):
     """Factory: creates node that analyzes radial sectors around fire hotspots.
-    
+
     Scans the grid for cells with risk_score >= threshold and builds
     8-sector radial summaries for each hotspot. This compresses 2000+ cells
     into ~24 sector summaries (3 hotspots × 8 sectors).
-    
+
     Parameters
     ──────────
-    world_engine : The simulation engine containing the grid
+    world : Read-only view over the world (the engine satisfies this).
     risk_threshold : Minimum risk_score to qualify as a hotspot
     max_sector_miles : Maximum distance to trace in each sector
-    
+
     Returns
     ───────
     Node function that returns {"sector_analysis": [...], "status": PROCESSING}
     """
-    grid = world_engine.grid
-
     # Risk read seam. Defaults to the in-memory grid scan (identical to the
     # previous inline behaviour); a persistent binding can be injected for
     # deployments where risk does not live on an in-process grid.
-    view: RiskView = risk_view or GridRiskView(grid)
+    view: RiskView = risk_view or GridRiskView(world)
 
-    # Infer cell size from physics config (default to 200ft)
-    cell_size_ft = getattr(world_engine.physics, 'cell_size_ft', 200.0)
+    cell_size_ft = world.cell_size_ft
     max_cells = int((max_sector_miles * 5280) / cell_size_ft)
     
     @node_executor("sector_analysis")
@@ -106,7 +104,7 @@ def make_sector_analysis_node(
         # behaviour is unchanged for the in-memory demo.
         for spot in view.hotspots(risk_threshold):
             row, col = spot.row, spot.col
-            cell = grid.get_cell(row, col)
+            cell = world.get_cell(row, col)
 
             # Wind direction is observed-world topology; read from the grid.
             wind_dir = getattr(cell.cell_state, 'wind_direction_deg', 0)
@@ -115,7 +113,7 @@ def make_sector_analysis_node(
             sectors = []
             for sector_name, (dr, dc) in SECTOR_VECTORS.items():
                 _miles, sector_cells, stop_reason = trace_sector(
-                    grid, row, col, dr, dc, max_cells, cell_size_ft
+                    world, row, col, dr, dc, max_cells, cell_size_ft
                 )
                 sector_summary = analyze_sector(
                     sector_name, sector_cells, stop_reason, wind_dir, cell_size_ft

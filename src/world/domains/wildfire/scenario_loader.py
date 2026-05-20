@@ -50,11 +50,6 @@ logger = logging.getLogger(__name__)
 
 # ── Fallback defaults (used only when DB has no value) ───────────────────────
 
-_DEFAULT_TERRAIN = TerrainType.SCRUB
-_DEFAULT_VEGETATION = 0.45
-_DEFAULT_FUEL_MOISTURE = 0.12
-_DEFAULT_SLOPE = 0.0
-
 _DEFAULT_CELL_SIZE_FT = 6336.0
 _DEFAULT_TIME_STEP_MIN = 5.0
 _DEFAULT_BURN_DURATION_TICKS = 10
@@ -66,6 +61,26 @@ _DEFAULT_ENVIRONMENT = dict(
     wind_direction_deg=45.0,
     pressure_hpa=1013.0,
 )
+
+
+def _make_water_sentinel() -> FireCellState:
+    """Cell state for grid positions absent from the DB.
+
+    WATER terrain with saturated fuel moisture — fire-spread physics treats
+    this as non-burnable, so missing cells act as a natural firebreak rather
+    than carrying fabricated fuel through gaps in the data.
+    """
+    return FireCellState(
+        terrain_type=TerrainType.WATER,
+        vegetation=0.0,
+        fuel_moisture=1.0,
+        slope=0.0,
+        temperature_c=30.0,
+        humidity_pct=25.0,
+        wind_speed_mps=5.0,
+        wind_direction_deg=0.0,
+        pressure_hpa=1013.0,
+    )
 
 
 def load_scenario_from_db(
@@ -188,32 +203,43 @@ def load_scenario_from_db(
         )
 
     # ── Build grid ───────────────────────────────────────────────
+    # The factory is the single seam: DB hit returns the real cell;
+    # DB miss returns a WATER sentinel so missing positions form a firebreak
+    # instead of carrying fabricated fuel.
+    missing_count = 0
+
+    def build_cell_state(r: int, c: int, layer: int = 0) -> FireCellState:
+        nonlocal missing_count
+        record = terrain_dict.get((r, c, layer))
+        if record is None:
+            missing_count += 1
+            return _make_water_sentinel()
+        return terrain_repo.build_fire_cell_state(record)
+
     grid = GenericTerrainGrid(
         rows=rows,
         cols=cols,
         layers=layers,
-        initial_state_factory=physics.initial_cell_state,
+        initial_state_factory=build_cell_state,
     )
 
+    if missing_count:
+        logger.warning(
+            "Filled %d missing cell(s) with WATER sentinel — "
+            "DB does not have terrain rows for all grid positions.",
+            missing_count,
+        )
+
+    # ── Stamp lat/lon attributes (DB value if present, else bounds-derived) ─
     for r in range(rows):
         for c in range(cols):
             for lay in range(layers):
-                if (r, c, lay) in terrain_dict:
-                    record = terrain_dict[(r, c, lay)]
-                    fire_state = terrain_repo.build_fire_cell_state(record)
-                    lat = record.lat
-                    lon = record.long
+                record = terrain_dict.get((r, c, lay))
+                if record is not None:
+                    lat, lon = record.lat, record.long
                 else:
-                    fire_state = FireCellState(
-                        terrain_type=_DEFAULT_TERRAIN,
-                        vegetation=_DEFAULT_VEGETATION,
-                        fuel_moisture=_DEFAULT_FUEL_MOISTURE,
-                        slope=_DEFAULT_SLOPE,
-                    )
                     latlon = grid_to_latlon(r, c, rows, cols, bounds)
                     lat, lon = latlon.lat, latlon.lon
-
-                grid.update_cell_state(r, c, fire_state, layer=lay)
                 cell = grid.get_cell(r, c, lay)
                 cell.attributes["lat"] = lat
                 cell.attributes["lon"] = lon

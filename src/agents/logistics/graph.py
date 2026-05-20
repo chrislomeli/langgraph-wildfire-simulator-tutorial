@@ -75,7 +75,7 @@ def build_logistics_agent_graph(*, agent_deps: AgentDependencies) -> LogisticsGr
     builder.add_node(
         "sector_analysis",
         make_sector_analysis_node(
-            world_engine=agent_deps.world_engine,
+            world=agent_deps.world_engine,
             risk_threshold=5,
             max_sector_miles=20.0
         )

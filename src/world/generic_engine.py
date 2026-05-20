@@ -48,6 +48,7 @@ from world.cell_state import C
 from world.environment import EnvironmentState
 from world.generic_grid import GenericTerrainGrid
 from world.physics import PhysicsModule, StateEvent
+from world.state_snapshot import CellStateSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -137,10 +138,36 @@ class GenericWorldEngine(Generic[C]):
         # History of ground truth snapshots, one per tick.
         self.history: list[GenericGroundTruthSnapshot] = []
 
+        # Per-cell state snapshots accumulated across ticks. Each entry is
+        # ready for a direct UPDATE against cell_state. See
+        # ``world.state_snapshot`` for the writeback contract.
+        self.state_snapshot_log: list[CellStateSnapshot] = []
+
     @property
     def current_tick(self) -> int:
         """The current simulation tick (0-based, incremented after each tick)."""
         return self._tick
+
+    # ── WorldView Protocol implementation ────────────────────────────
+    # The engine exposes a minimal read surface that agent code depends on
+    # via the ``WorldView`` Protocol. Keeping these as properties / forwarding
+    # methods means agent code never has to reach into ``engine.grid`` or
+    # ``engine.physics`` directly.
+
+    @property
+    def rows(self) -> int:
+        return self.grid.rows
+
+    @property
+    def cols(self) -> int:
+        return self.grid.cols
+
+    @property
+    def cell_size_ft(self) -> float:
+        return getattr(self.physics, "cell_size_ft", 200.0)
+
+    def get_cell(self, row: int, col: int, layer: int = 0):
+        return self.grid.get_cell(row, col, layer)
 
     def tick(self) -> GenericGroundTruthSnapshot:
         """
@@ -189,6 +216,20 @@ class GenericWorldEngine(Generic[C]):
             grid_summary=grid_summary,
         )
         self.history.append(snapshot)
+
+        # Per-cell snapshot — full state, every cell, every tick. Captures
+        # changes made in-place (e.g. ScriptedTrendPhysics) that don't surface
+        # as StateEvents in ``state_events`` above.
+        for cell in self.grid.iter_cells():
+            self.state_snapshot_log.append(
+                CellStateSnapshot(
+                    tick=self._tick,
+                    grid_row=cell.row,
+                    grid_column=cell.col,
+                    layer=cell.layer,
+                    state=cell.cell_state.model_dump(),
+                )
+            )
 
         # Log a summary line for visibility during demos.
         logger.info(

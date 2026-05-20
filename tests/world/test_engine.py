@@ -54,6 +54,42 @@ class TestWorldEngineTick:
         assert len(imap[0]) == 5
 
 
+class TestStateSnapshotLog:
+    def test_log_empty_before_tick(self, engine):
+        assert engine.state_snapshot_log == []
+
+    def test_log_populated_after_tick(self, engine):
+        engine.tick()
+        # One snapshot per cell on a 5×5 grid
+        assert len(engine.state_snapshot_log) == 25
+
+    def test_log_grows_with_each_tick(self, engine):
+        engine.tick()
+        engine.tick()
+        assert len(engine.state_snapshot_log) == 50
+
+    def test_snapshot_has_full_state(self, engine):
+        engine.tick()
+        entry = engine.state_snapshot_log[0]
+        assert entry.tick == 0
+        assert isinstance(entry.state, dict)
+        assert "temperature_c" in entry.state
+
+
+class TestWorldViewProtocolOnEngine:
+    def test_engine_exposes_rows_cols(self, engine):
+        assert engine.rows == 5
+        assert engine.cols == 5
+
+    def test_engine_exposes_cell_size_ft(self, engine):
+        assert engine.cell_size_ft > 0
+
+    def test_engine_get_cell_forwards_to_grid(self, engine):
+        cell_via_engine = engine.get_cell(0, 0)
+        cell_via_grid = engine.grid.get_cell(0, 0)
+        assert cell_via_engine is cell_via_grid
+
+
 class TestWorldEngineRun:
     def test_run_returns_list_of_snapshots(self, engine):
         snapshots = engine.run(ticks=10)

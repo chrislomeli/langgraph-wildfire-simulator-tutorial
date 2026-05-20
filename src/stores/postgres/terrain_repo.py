@@ -31,7 +31,7 @@ class TerrainRepository(TerrainRepositoryBase):
     def fetch_terrain(
         self,
         region_name: str,
-        state_group: str = 'seed',
+        version: str = 'seed',
         limit: int | None = None,
     ) -> tuple[dict[tuple[int, int, int], Terrain], TerrainConfig]:
         """Load terrain cells for a region.
@@ -39,7 +39,7 @@ class TerrainRepository(TerrainRepositoryBase):
         Parameters
         ----------
         region_name : e.g. 'lpnf_south', 'lpnf_north'
-        state_group: e,g, 'seed'
+        version: e,g, 'seed'
         limit : Optional max cells to load (defensive, default None = all)
 
         Returns
@@ -64,22 +64,22 @@ class TerrainRepository(TerrainRepositoryBase):
                t.long,
                t.location,
                t.region,
-               c.state_group,
+               c.version,
                c.fuel_moisture,
                c.temperature_c,
                c.humidity_pct,
                c.wind_speed_mps,
                c.wind_direction_deg,
                c.pressure_hpa,
-               c.vegetation_ndvi
+               c.vegetation
         from terrain t
                  join cell_state c
                       on t.grid_column = c.grid_column and t.grid_row = c.grid_row and t.layer = c.layer and t.region = c.region
         where t.region = %s
-          and c.state_group = %s
+          and c.version = %s
         order by grid_row, grid_column, layer;
         """
-        params: tuple = (region_name, state_group,)
+        params: tuple = (region_name, version,)
         if limit is not None:
             sql += " limit %s"
             params = (region_name, limit)
