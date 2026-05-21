@@ -1,6 +1,7 @@
 """Postgres-backed implementation of the stores facade."""
 
 from stores.postgres.advisory_repo import ResourceAdvisoryRepository
+from stores.postgres.cell_state_repo import CellStateRepository
 from stores.postgres.data_store import PostgresDataStore
 from stores.postgres.gateway import PgGateway, get_pg_gateway
 from stores.postgres.resources_repo import TranscriptRepository
@@ -12,6 +13,7 @@ __all__ = [
     "PgGateway",
     "get_pg_gateway",
     "PostgresDataStore",
+    "CellStateRepository",
     "ResourceAdvisoryRepository",
     "ScenarioPlanRepository",
     "TerrainRepository",

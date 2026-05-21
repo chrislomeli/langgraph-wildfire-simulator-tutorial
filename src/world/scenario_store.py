@@ -20,11 +20,16 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from stores.base import ScenarioPlanRepository, TerrainRepository
+from stores.base import CellStateRepository, ScenarioPlanRepository, TerrainRepository
 
 
 class ScenarioStore(Protocol):
-    """The two repos the world-service needs to stand up a scenario."""
+    """The repos the world-service needs to stand up a scenario:
+    cell_state (bootstrap the working copy), terrain (read the grid), and
+    scenario_plan (the deterministic weather trajectory)."""
+
+    @property
+    def cell_state(self) -> CellStateRepository: ...
 
     @property
     def terrain(self) -> TerrainRepository: ...

@@ -34,9 +34,7 @@ class ScenarioPlanRepository(ScenarioPlanRepositoryBase):
                start_tick,
                duration_ticks,
                start_value,
-               target_value,
-               curve,
-               hold_after
+               target_value
         from scenario_cell_plan
         where region = %s
         order by grid_row, grid_column, layer, metric, start_tick;

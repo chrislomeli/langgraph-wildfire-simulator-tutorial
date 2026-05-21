@@ -8,6 +8,7 @@ WildfireActivity) are backend-agnostic and live at the package root.
 
 from stores.base import (
     AdvisoryRepository,
+    CellStateRepository,
     DataStore,
     ResourceRepository,
     TerrainConfig,
@@ -20,6 +21,7 @@ from stores.schemas import Resource, Terrain, WildfireActivity
 __all__ = [
     # ABCs (the public contract)
     "AdvisoryRepository",
+    "CellStateRepository",
     "DataStore",
     "ResourceRepository",
     "TerrainConfig",

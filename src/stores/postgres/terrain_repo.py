@@ -79,10 +79,10 @@ class TerrainRepository(TerrainRepositoryBase):
           and c.version = %s
         order by grid_row, grid_column, layer;
         """
-        params: tuple = (region_name, version,)
+        params: tuple = (region_name, version)
         if limit is not None:
             sql += " limit %s"
-            params = (region_name, limit)
+            params = (region_name, version, limit)
 
         rows = self._pg.fetch_rows(sql, params)
 

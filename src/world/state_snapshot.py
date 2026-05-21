@@ -9,7 +9,7 @@ database to bring ``cell_state`` rows in sync with the in-memory grid:
            humidity_pct  = %(humidity_pct)s,
            ...
      WHERE region      = %(region)s
-       AND state_group = %(state_group)s
+       AND version     = %(version)s
        AND grid_row    = %(grid_row)s
        AND grid_column = %(grid_column)s
        AND layer       = %(layer)s

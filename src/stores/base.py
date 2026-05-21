@@ -29,11 +29,27 @@ class TerrainConfig:
     burn_duration_ticks: int | None = None
 
 
+class CellStateRepository(ABC):
+    """Manages the mutable working copy of cell_state.
+
+    `cell_state` holds named groups of state in its `version` column:
+    `'seed'` is the immutable source; a working copy (e.g. `'simulation'`)
+    is created from seed and then mutated by a simulation run.
+    """
+
+    @abstractmethod
+    def bootstrap(self, region: str, version: str, seed_version: str = "seed") -> int:
+        """Reset the working copy: delete `version` rows, copy from `seed_version`.
+        Returns the number of rows copied. Must refuse to target the seed group."""
+        ...
+
+
 class TerrainRepository(ABC):
     @abstractmethod
     def fetch_terrain(
         self,
         region_name: str,
+        version: str = "seed",
         limit: int | None = None,
     ) -> tuple[dict[tuple[int, int, int], Terrain], TerrainConfig]: ...
 
@@ -90,6 +106,10 @@ class ScenarioPlanRepository(ABC):
 
 class DataStore(ABC):
     """Top-level facade exposing per-collection repository handles."""
+
+    @property
+    @abstractmethod
+    def cell_state(self) -> CellStateRepository: ...
 
     @property
     @abstractmethod

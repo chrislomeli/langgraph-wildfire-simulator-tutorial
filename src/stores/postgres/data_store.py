@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from stores.base import DataStore
 from stores.postgres.advisory_repo import ResourceAdvisoryRepository
+from stores.postgres.cell_state_repo import CellStateRepository
 from stores.postgres.gateway import PgGateway
 from stores.postgres.resources_repo import TranscriptRepository
 from stores.postgres.scenario_plan_repo import ScenarioPlanRepository
@@ -21,6 +22,7 @@ class PostgresDataStore(DataStore):
 
     def __init__(self, pg_gateway: PgGateway | None = None):
         self._pg = pg_gateway or PgGateway()
+        self._cell_state: CellStateRepository | None = None
         self._terrain: TerrainRepository | None = None
         self._wildfires: WildfireRepository | None = None
         self._resources: TranscriptRepository | None = None
@@ -30,6 +32,12 @@ class PostgresDataStore(DataStore):
     @property
     def gateway(self) -> PgGateway:
         return self._pg
+
+    @property
+    def cell_state(self) -> CellStateRepository:
+        if self._cell_state is None:
+            self._cell_state = CellStateRepository(self._pg)
+        return self._cell_state
 
     @property
     def terrain(self) -> TerrainRepository:

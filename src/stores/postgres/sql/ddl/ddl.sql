@@ -177,7 +177,7 @@ create index idx_resource_advisories_guardrail
 
 create table cell_state
 (
-    state_group        varchar(40)                not null,
+    version            varchar(40)                not null,
     grid_row           integer                    not null,
     grid_column        integer                    not null,
     layer              integer          default 0 not null,
@@ -189,16 +189,16 @@ create table cell_state
     fuel_moisture      double precision,
     fire_intensity     double precision default 0 not null,
     region             varchar(60),
-    vegetation_ndvi    double precision,
+    vegetation         double precision,
     constraint cell_state_pk
-        unique (state_group, grid_row, grid_column, layer, region)
+        unique (version, grid_row, grid_column, layer, region)
 );
 
-comment on column cell_state.vegetation_ndvi is ' < 0     | water/cloud/snow/invalid  :: 0.0–0.1 | bare ground / rock  :: 0.1–0.3 | sparse vegetation :: 0.3–0.5 | moderate vegetation   :: 0.5–0.8 | dense healthy vegetation  ::| > 0.8   | extremely lush vegetation | ';
+comment on column cell_state.vegetation is ' < 0     | water/cloud/snow/invalid  :: 0.0–0.1 | bare ground / rock  :: 0.1–0.3 | sparse vegetation :: 0.3–0.5 | moderate vegetation   :: 0.5–0.8 | dense healthy vegetation  ::| > 0.8   | extremely lush vegetation | ';
 
 create table cell_escalation
 (
-    state_group      varchar(40)                            not null,
+    version          varchar(40)                            not null,
     grid_row         integer                                not null,
     grid_column      integer                                not null,
     layer            integer                  default 0     not null,
@@ -211,7 +211,7 @@ create table cell_escalation
     rationale        text                                   not null,
     created_at       timestamp with time zone default now() not null,
     constraint cell_escalation_pk
-        unique (state_group, region, grid_row, grid_column, layer, tick),
+        unique (version, region, grid_row, grid_column, layer, tick),
     constraint cell_escalation_confidence_ck
         check ((confidence >= 1) AND (confidence <= 10)),
     constraint cell_escalation_property_ck
@@ -258,7 +258,7 @@ create table scenario_cell_plan
         check (duration_ticks >= 1),
     constraint scp_metric_ck
         check ((metric)::text = ANY
-               (ARRAY [('temperature_c'::character varying)::text, ('humidity_pct'::character varying)::text, ('wind_speed_mps'::character varying)::text, ('wind_direction_deg'::character varying)::text, ('pressure_hpa'::character varying)::text, ('fuel_moisture'::character varying)::text, ('vegetation_ndvi'::character varying)::text]))
+               ((ARRAY ['temperature_c'::character varying, 'humidity_pct'::character varying, 'wind_speed_mps'::character varying, 'wind_direction_deg'::character varying, 'pressure_hpa'::character varying, 'fuel_moisture'::character varying, 'vegetation'::character varying])::text[]))
 );
 
 create table expected_escalation
@@ -316,5 +316,27 @@ create table eval_results
     constraint eval_results_pk
         unique (eval_run_id, grid_row, grid_column, layer),
     foreign key (eval_run_id) references eval_runs
+);
+
+create table terrain_backup
+(
+    grid_column         integer,
+    grid_row            integer,
+    layer               integer,
+    cell_key            varchar(30),
+    terrain             varchar(30),
+    vegetation          double precision,
+    slope               real,
+    cell_size_ft        integer,
+    time_step_min       real,
+    burn_duration_ticks integer,
+    lat                 double precision,
+    long                double precision,
+    location            geography(Point, 4326),
+    region              varchar(60),
+    terrain_type        varchar(20),
+    property_stake      varchar(10),
+    life_stake          varchar(10),
+    stake_notes         text
 );
 

@@ -94,22 +94,30 @@ def _make_water_sentinel() -> FireCellState:
 def start_world_service(
     *,
     region_name: str,
+    version: str = "simulation",
     data_store: ScenarioStore,
     bounds: dict = LPNF_SOUTH,
     layers: int = 1,
+    bootstrap: bool = True,
 ) -> GenericWorldEngine[FireCellState]:
     """Stand up the world-service for a scenario.
 
     Parameters
     ──────────
     region_name : DB region key (e.g. 'lpnf-south').
-    data_store  : Anything satisfying ScenarioStore — i.e. exposes
-                  ``.terrain`` and ``.scenario_plan``. The concrete
-                  DataStore satisfies this structurally.
+    version     : The cell_state working-copy group this run reads/writes
+                  (e.g. 'simulation'). NOT 'seed' — seed is the immutable
+                  source. The grid is loaded from this group.
+    data_store  : Anything satisfying ScenarioStore — exposes ``.cell_state``,
+                  ``.terrain`` and ``.scenario_plan``. The concrete DataStore
+                  satisfies this structurally.
     bounds      : Geographic bounding box used only as a fallback for
                   WATER-sentinel cells (no DB row). Defaults to southern
                   Los Padres NF.
     layers      : Number of grid layers (default 1).
+    bootstrap   : When True (default), reset the working copy from seed
+                  before reading — guarantees a clean, deterministic start.
+                  Pass False to resume an existing working copy in place.
 
     Returns
     ───────
@@ -119,16 +127,21 @@ def start_world_service(
 
     Raises
     ──────
-    ValueError : if the DB returns no terrain rows for the region.
+    ValueError : if the DB returns no terrain rows for the region/version.
     """
-    # ── Load terrain from DB ─────────────────────────────────────
+    # ── Bootstrap the working copy from seed (clean, deterministic start) ─
+    if bootstrap:
+        data_store.cell_state.bootstrap(region=region_name, version=version)
+
+    # ── Load terrain from DB (joined against the working-copy cell_state) ─
     terrain_repo = data_store.terrain
-    terrain_dict, terrain_config = terrain_repo.fetch_terrain(region_name)
+    terrain_dict, terrain_config = terrain_repo.fetch_terrain(region_name, version=version)
 
     if not terrain_dict:
         raise ValueError(
-            f"No terrain rows found in DB for region {region_name!r}. "
-            "Run the data pipeline to seed the terrain table first."
+            f"No terrain rows found in DB for region {region_name!r} "
+            f"version {version!r}. Confirm the terrain table is seeded and "
+            f"the {version!r} working copy was bootstrapped from seed."
         )
 
     # ── Derive grid dimensions from DB rows ──────────────────────
