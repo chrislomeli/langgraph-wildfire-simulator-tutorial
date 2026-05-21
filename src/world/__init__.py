@@ -1,28 +1,19 @@
 """
-world-simiulator.world
+world-simulator.world — the world-service (see [[pod-architecture]]).
 
-The world engine — maintains ground truth that sensors sample from.
+The world is the source of truth for the simulation. Each tick the
+physics module applies the authored scenario plan to the grid; the
+``state_snapshot_log`` accumulates per-tick cell snapshots for DB
+writeback; ``tick_events.iter_tick_events`` yields location-only
+change notifications for downstream consumers.
 
-Design philosophy
-─────────────────
-The world engine is a deterministic sandbox.  It simulates an environment
-(terrain, weather, fire) that evolves over discrete time ticks.  Sensors
-attached to the engine read from the world state and produce SensorEvent
-envelopes.  The agent never sees the world engine directly — it only sees
-sensor readings.
+The agent (advisory-service) consumes the world through ``WorldView``
+(read API) and the tick-event stream — never by reaching into the
+engine. See [[pod-architecture]] and [[clean-data-no-sensor-noise]].
 
-The gap between ground truth (what the engine knows) and sensor output
-(what the agent sees) is where interesting agent behaviour lives.
-A fire is spreading, but the smoke sensor is in DROPOUT mode.
-The thermal camera sees a hot spot, but humidity is normal.
-The agent has to reason under uncertainty.
-
-Ground truth is recorded so that after a scenario runs, you can
-evaluate the agent's decisions against what was actually happening.
-
-This package does NOT contain LangGraph, Kafka, or agent logic.
-It is pure simulation — deterministic (given a seed), stateful,
-and fast enough to generate thousands of scenarios offline.
+This package is pure simulation: deterministic (given a plan),
+stateful, and fast enough to generate thousands of scenarios offline.
+No LangGraph, no LLM, no agent logic.
 """
 
 from world.cell_state import CellState as CellState
@@ -38,6 +29,7 @@ from world.grid import FireState as FireState
 from world.grid import TerrainType as TerrainType
 from world.physics import PhysicsModule as PhysicsModule
 from world.physics import StateEvent as StateEvent
+from world.scenario_store import ScenarioStore as ScenarioStore
 from world.sector_analysis import HotspotSectors as HotspotSectors
 from world.sector_analysis import SectorSummary as SectorSummary
 from world.sector_analysis import StopReason as StopReason
@@ -45,10 +37,14 @@ from world.sector_analysis import analyze_sector as analyze_sector
 from world.sector_analysis import format_stop_reason as format_stop_reason
 from world.sector_analysis import is_wind_aligned as is_wind_aligned
 from world.sector_analysis import trace_sector as trace_sector
-from world.sensor_inventory import SensorInventory as SensorInventory
+from world.state_snapshot import CellStateSnapshot as CellStateSnapshot
+from world.tick_events import TickChangeEvent as TickChangeEvent
+from world.tick_events import iter_tick_events as iter_tick_events
+from world.world_view import WorldView as WorldView
 
 __all__ = [
     "CellState",
+    "CellStateSnapshot",
     "Direction",
     "EnvironmentState",
     "FireState",
@@ -60,13 +56,16 @@ __all__ = [
     "PhysicsModule",
     "SECTOR_ANGLES",
     "SECTOR_VECTORS",
+    "ScenarioStore",
     "SectorSummary",
-    "SensorInventory",
     "StateEvent",
     "StopReason",
     "TerrainType",
+    "TickChangeEvent",
+    "WorldView",
     "analyze_sector",
     "format_stop_reason",
     "is_wind_aligned",
+    "iter_tick_events",
     "trace_sector",
 ]

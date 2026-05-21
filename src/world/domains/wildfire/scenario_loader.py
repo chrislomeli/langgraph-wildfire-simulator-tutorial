@@ -1,50 +1,58 @@
 """
-world-simiulator.domains.wildfire.scenario_loader
+world-simulator.domains.wildfire.scenario_loader
 
-Load a wildfire scenario from the database and return the objects
-the pipeline needs:
+The world-service entry point for wildfire scenarios.
 
-    engine           : GenericWorldEngine[FireCellState]
-    sensor_inventory : SensorInventory
+What this does
+──────────────
+``start_world_service`` reads terrain + cell_state + scenario_cell_plan from
+the database and builds a ``GenericWorldEngine`` wired with
+``ScriptedTrendPhysics``. The returned engine:
 
-All terrain and sensor data is read from the database (TerrainRepository,
-SensorRepository).  There are no JSON files at runtime.
+* Satisfies the ``WorldView`` Protocol (read API for consumers).
+* Ticks deterministically per the scenario plan.
+* Accumulates ``state_snapshot_log`` (full per-cell state per tick, for DB
+  writeback — see ``world.state_snapshot``).
+* Exposes ``physics.last_changed_cells`` so ``iter_tick_events`` can emit
+  ``TickChangeEvent`` notifications on the wire.
 
-Grid dimensions are derived from the terrain rows in the DB — the largest
-(grid_row, grid_column) values determine the grid size, so there is no
-separate dimension config to keep in sync.
+What this does NOT do
+─────────────────────
+* No sensor loading. The world-service does not own sensors. Agents read
+  the world through ``WorldView``; sensor abstraction is dead under
+  [[clean-data-no-sensor-noise]].
+* No ignition. Scripted physics never starts a fire; the agent forecasts
+  ignition risk from authored conditions.
+* No physics-mode selection. Scripted-only — see [[scripted-trend-driver]].
 
 Geo overlay
 ───────────
 Every cell is stamped with real-world lat/lon coordinates that come
-directly from the terrain table (terrain.lat / terrain.long columns).
-Cells not covered by the DB fall back to grid_to_latlon() using the
-bounds dict.
+directly from the terrain table. Cells filled with the WATER sentinel
+(absent from DB) get bounds-derived lat/lon via ``grid_to_latlon``.
 
 Physics defaults
 ────────────────
-The DB terrain table carries cell_size_ft / time_step_min /
-burn_duration_ticks on every row.  The first non-null values found
-become the physics config.  Hardcoded fallbacks are used only when
-the DB has no values for a field.
+``cell_size_ft`` / ``time_step_min`` / ``burn_duration_ticks`` come from
+the terrain table (first non-null wins). Hardcoded fallbacks below are
+used only when the DB has no value for a field.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from agents.commons.geo import (
     LPNF_SOUTH,
     cell_size_miles,
     grid_to_latlon,
 )
-from stores.base import DataStore
 from world.domains.wildfire.cell_state import FireCellState, TerrainType
 from world.domains.wildfire.environment import FireEnvironmentState
+from world.domains.wildfire.scripted_trend_physics import ScriptedTrendPhysics
 from world.generic_engine import GenericWorldEngine
 from world.generic_grid import GenericTerrainGrid
-from world.sensor_inventory import SensorInventory
+from world.scenario_store import ScenarioStore
 
 logger = logging.getLogger(__name__)
 
@@ -83,66 +91,36 @@ def _make_water_sentinel() -> FireCellState:
     )
 
 
-def load_scenario_from_db(
+def start_world_service(
+    *,
     region_name: str,
-    data_store: DataStore,
+    data_store: ScenarioStore,
     bounds: dict = LPNF_SOUTH,
-    ignition_points: list[dict[str, Any]] | None = None,
     layers: int = 1,
-    use_rothermel: bool = True,
-    physics_mode: str = "rothermel",
-) -> tuple[GenericWorldEngine[FireCellState], SensorInventory]:
-    """
-    Build a wildfire engine and sensor inventory entirely from the database.
+) -> GenericWorldEngine[FireCellState]:
+    """Stand up the world-service for a scenario.
 
     Parameters
     ──────────
-    region_name      : DB region key (e.g. 'lpnf-south').
-    data_store       : Open DataStore (Postgres-backed today).
-    bounds           : Geographic bounding box used as a fallback for cells
-                       not in the DB.  Defaults to southern Los Padres NF.
-    ignition_points  : Optional list of dicts with keys row, col, layer
-                       (default 0), intensity (default 0.8).  Pass [] or
-                       None for no ignition (useful for eval/test scenarios).
-    layers           : Number of grid layers (default 1).
-    use_rothermel    : Legacy flag. When physics_mode is left at its
-                       default, False maps to "simple", True to "rothermel".
-    physics_mode     : "rothermel" (default) | "simple" | "scripted".
-                       "scripted" loads scenario_cell_plan via
-                       data_store.scenario_plan and never starts a fire
-                       (any ignition_points are ignored with a warning).
-                       Takes precedence over use_rothermel when set to a
-                       non-default value.
+    region_name : DB region key (e.g. 'lpnf-south').
+    data_store  : Anything satisfying ScenarioStore — i.e. exposes
+                  ``.terrain`` and ``.scenario_plan``. The concrete
+                  DataStore satisfies this structurally.
+    bounds      : Geographic bounding box used only as a fallback for
+                  WATER-sentinel cells (no DB row). Defaults to southern
+                  Los Padres NF.
+    layers      : Number of grid layers (default 1).
 
     Returns
     ───────
-    (engine, sensor_inventory) tuple ready to hand to RuntimeOrchestrator.
+    GenericWorldEngine[FireCellState] wired with ScriptedTrendPhysics. The
+    engine satisfies WorldView and exposes ``state_snapshot_log`` for
+    writeback and ``physics.last_changed_cells`` for event emission.
 
     Raises
     ──────
     ValueError : if the DB returns no terrain rows for the region.
     """
-    ignition_points = ignition_points or []
-
-    # ── Resolve physics mode (legacy use_rothermel maps in when unset) ─
-    physics_mode = (
-        physics_mode
-        if physics_mode != "rothermel"
-        else ("rothermel" if use_rothermel else "simple")
-    )
-    if physics_mode not in ("rothermel", "simple", "scripted"):
-        raise ValueError(
-            f"Unknown physics_mode {physics_mode!r} — "
-            "expected 'rothermel', 'simple', or 'scripted'."
-        )
-    if physics_mode == "scripted" and ignition_points:
-        logger.warning(
-            "physics_mode='scripted' ignores %d ignition point(s) — "
-            "scripted scenarios never start a fire.",
-            len(ignition_points),
-        )
-        ignition_points = []
-
     # ── Load terrain from DB ─────────────────────────────────────
     terrain_repo = data_store.terrain
     terrain_dict, terrain_config = terrain_repo.fetch_terrain(region_name)
@@ -175,32 +153,19 @@ def load_scenario_from_db(
         lon_miles,
     )
 
-    # ── Physics — DB values win, hardcoded fallbacks used when absent ─
+    # ── Physics — scripted only ──────────────────────────────────
     cell_size_ft = terrain_config.cell_size_ft or _DEFAULT_CELL_SIZE_FT
     time_step_min = terrain_config.time_step_min or _DEFAULT_TIME_STEP_MIN
     burn_duration_ticks = terrain_config.burn_duration_ticks or _DEFAULT_BURN_DURATION_TICKS
 
-    if physics_mode == "rothermel":
-        from world.domains.wildfire.rothermel_physics import RothermelFirePhysicsModule
-
-        physics = RothermelFirePhysicsModule(
-            cell_size_ft=cell_size_ft,
-            time_step_min=time_step_min,
-            burn_duration_ticks=burn_duration_ticks,
-        )
-    elif physics_mode == "simple":
-        from world.domains.wildfire.physics import SimpleFirePhysicsModule
-
-        physics = SimpleFirePhysicsModule(
-            base_probability=0.15,
-            burn_duration_ticks=burn_duration_ticks,
-        )
-    else:  # "scripted" — validated above
-        from world.domains.wildfire.scripted_trend_physics import ScriptedTrendPhysics
-
-        physics = ScriptedTrendPhysics(
-            plan=data_store.scenario_plan.fetch_plan(region_name),
-        )
+    physics = ScriptedTrendPhysics(
+        plan=data_store.scenario_plan.fetch_plan(region_name),
+    )
+    # Expose terrain-derived physics constants so consumers reading
+    # ``world.cell_size_ft`` via WorldView get the right value.
+    physics.cell_size_ft = cell_size_ft
+    physics.time_step_min = time_step_min
+    physics.burn_duration_ticks = burn_duration_ticks
 
     # ── Build grid ───────────────────────────────────────────────
     # The factory is the single seam: DB hit returns the real cell;
@@ -247,33 +212,6 @@ def load_scenario_from_db(
     # ── Environment ──────────────────────────────────────────────
     environment = FireEnvironmentState(**_DEFAULT_ENVIRONMENT)
 
-    # ── Load sensors from DB ─────────────────────────────────────
-    sensor_repo = data_store.sensors
-    all_sensors = sensor_repo.fetch_sensors(
-        region_name=region_name,
-        grid_rows=rows,
-        grid_cols=cols,
-        grid_layers=layers,
-    )
-
-    sensor_inventory = SensorInventory(
-        grid_rows=rows,
-        grid_cols=cols,
-        grid_layers=layers,
-        validate_bounds=False,
-    )
-    skipped = 0
-    for sensor in all_sensors.all_sensors():
-        if grid.register_layer(
-            sensor.source_id, sensor.grid_row, sensor.grid_col, sensor.grid_layer, warn=True
-        ):
-            sensor_inventory.register_auto(sensor)
-        else:
-            skipped += 1
-
-    if skipped:
-        logger.warning("Skipped %d sensors outside terrain grid bounds", skipped)
-
     # ── Build engine ─────────────────────────────────────────────
     engine = GenericWorldEngine(
         grid=grid,
@@ -281,56 +219,12 @@ def load_scenario_from_db(
         physics=physics,
     )
 
-    # ── Apply ignition points ────────────────────────────────────
-    for ign in ignition_points:
-        r = ign["row"]
-        c = ign["col"]
-        lay = ign.get("layer", 0)
-        intensity = ign.get("intensity", 0.8)
-        ignition_state = grid.get_cell(r, c, lay).cell_state.ignited(
-            tick=0,
-            intensity=intensity,
-        )
-        engine.inject_state(r, c, ignition_state)
-
     logger.info(
-        "Scenario '%s' loaded: %dx%dx%d grid, %d sensors, %d ignition point(s)",
+        "world-service ready for scenario %r: %dx%dx%d grid",
         region_name,
         rows,
         cols,
         layers,
-        sensor_inventory.size,
-        len(ignition_points),
     )
 
-    return engine, sensor_inventory
-
-
-def load_scenario_from_package(
-    data_store: DataStore,
-    region_name: str = "lpnf-south",
-    bounds: dict = LPNF_SOUTH,
-    ignition_points: list[dict[str, Any]] | None = None,
-    physics_mode: str = "rothermel",
-) -> tuple[GenericWorldEngine[FireCellState], SensorInventory]:
-    """
-    Convenience wrapper — load a named region from the DB.
-
-    Parameters
-    ──────────
-    data_store      : Open DataStore (Postgres-backed today).
-    region_name     : DB region key (default 'lpnf-south').
-    bounds          : Geographic bounding box fallback.
-    ignition_points : Optional ignition list (see load_scenario_from_db).
-
-    Returns
-    ───────
-    (engine, sensor_inventory) tuple.
-    """
-    return load_scenario_from_db(
-        region_name=region_name,
-        data_store=data_store,
-        bounds=bounds,
-        ignition_points=ignition_points,
-        physics_mode=physics_mode,
-    )
+    return engine

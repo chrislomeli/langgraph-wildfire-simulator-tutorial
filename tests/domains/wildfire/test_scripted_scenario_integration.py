@@ -15,7 +15,7 @@ import pytest
 
 from stores.mock import get_mock_data_store
 from stores.schemas import ScenarioPlanSegment
-from world.domains.wildfire.scenario_loader import load_scenario_from_db
+from world.domains.wildfire.scenario_loader import start_world_service
 
 REGION = "lpnf-south"
 
@@ -64,8 +64,7 @@ class _PlanStore:
 
 
 def _build_engine():
-    engine, _ = load_scenario_from_db(REGION, _PlanStore(), physics_mode="scripted")
-    return engine
+    return start_world_service(region_name=REGION, data_store=_PlanStore())
 
 
 def _advance_to(engine, scripted_tick: int):

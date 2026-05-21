@@ -1,7 +1,7 @@
 """Backend-agnostic data-access contracts.
 
-`DataStore` is the facade injected into agents and scenario loaders. It
-exposes per-collection repository handles (sensors, terrain, wildfires,
+`DataStore` is the facade injected into scenario loaders. It exposes
+per-collection repository handles (terrain, scenario_plan, wildfires,
 resources, advisories), each defined as an ABC so concrete backends
 (Postgres today; SQLite/JSON in the future) implement the same surface.
 
@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from stores.schemas import Resource, ScenarioPlanSegment, Terrain, WildfireActivity
     from world.domains.wildfire.cell_state import FireCellState
-    from world.sensor_inventory import SensorInventory
 
 
 @dataclass
@@ -28,18 +27,6 @@ class TerrainConfig:
     cell_size_ft: float | None = None
     time_step_min: float | None = None
     burn_duration_ticks: int | None = None
-
-
-class SensorRepository(ABC):
-    @abstractmethod
-    def fetch_sensors(
-        self,
-        region_name: str,
-        grid_rows: int = 0,
-        grid_cols: int = 0,
-        grid_layers: int = 1,
-        limit: int | None = None,
-    ) -> SensorInventory: ...
 
 
 class TerrainRepository(ABC):
@@ -103,10 +90,6 @@ class ScenarioPlanRepository(ABC):
 
 class DataStore(ABC):
     """Top-level facade exposing per-collection repository handles."""
-
-    @property
-    @abstractmethod
-    def sensors(self) -> SensorRepository: ...
 
     @property
     @abstractmethod

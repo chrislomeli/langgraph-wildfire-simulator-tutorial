@@ -1,17 +1,16 @@
 """
-world-simiulator.domains.wildfire
+world-simulator.domains.wildfire
 
-Wildfire domain — stochastic fire spread on a terrain grid.
+Wildfire domain — cell state, physics, fuel models, NWCG resources,
+hardcoded-scenario factories.
 
-Public API:
-  FireCellState              — per-cell state (terrain, fuel, fire status)
-  FireEnvironmentState       — weather conditions (temp, humidity, wind)
-  SimpleFirePhysicsModule    — heuristic fire spread model
-  RothermelFirePhysicsModule — physics-based fire spread (Rothermel 1972)
-  FuelModel / get_fuel_model — fuel load by terrain type
-  NWCGResourceSpec           — NWCG-standard resource definitions
-  Sensor classes             — temperature, smoke, humidity, wind, thermal
-  Scenario factories         — create_basic_wildfire, create_full_wildfire_scenario
+The scripted plan-driven physics is the production path
+(see [[scripted-trend-driver]]). Rothermel and Simple physics modules
+are retained pending removal in task #6.
+
+Sensors are not part of this package — see [[clean-data-no-sensor-noise]]
+for the architectural decision and [[pod-architecture]] for how the
+agent reads the world without sensors.
 """
 
 from world.domains.wildfire.cell_state import FireCellState as FireCellState
@@ -32,19 +31,11 @@ from world.domains.wildfire.rothermel_physics import (
 from world.domains.wildfire.scripted_trend_physics import (
     ScriptedTrendPhysics as ScriptedTrendPhysics,
 )
-from world.domains.wildfire.sampler import sample_local_conditions as sample_local_conditions
-from world.domains.wildfire.sampler import sample_thermal_region as sample_thermal_region
 from world.domains.wildfire.scenarios import create_basic_wildfire as create_basic_wildfire
 from world.domains.wildfire.scenarios import (
     create_full_wildfire_scenario as create_full_wildfire_scenario,
 )
 from world.domains.wildfire.scenarios import create_wildfire_resources as create_wildfire_resources
-from world.domains.wildfire.sensors import BarometricSensor as BarometricSensor
-from world.domains.wildfire.sensors import HumiditySensor as HumiditySensor
-from world.domains.wildfire.sensors import SmokeSensor as SmokeSensor
-from world.domains.wildfire.sensors import TemperatureSensor as TemperatureSensor
-from world.domains.wildfire.sensors import ThermalCameraSensor as ThermalCameraSensor
-from world.domains.wildfire.sensors import WindSensor as WindSensor
 
 __all__ = [
     # Cell state
@@ -66,18 +57,8 @@ __all__ = [
     "get_by_id",
     "get_by_kind",
     "suppression_category",
-    # Scenarios
+    # Scenario factories (hardcoded; kept for tests)
     "create_basic_wildfire",
     "create_wildfire_resources",
     "create_full_wildfire_scenario",
-    # Sensors
-    "TemperatureSensor",
-    "HumiditySensor",
-    "WindSensor",
-    "SmokeSensor",
-    "BarometricSensor",
-    "ThermalCameraSensor",
-    # Sampler
-    "sample_local_conditions",
-    "sample_thermal_region",
 ]

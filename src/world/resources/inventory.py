@@ -1,30 +1,16 @@
 """
-world-simiulator.resources.inventory
+world-simulator.resources.inventory
 
 ResourceInventory — management of resource placement on a grid.
 
-What this is
-────────────
-The ResourceInventory tracks which resources are placed at which grid
-positions and provides queries for assessing preparedness.  It is the
-resource-side counterpart to SensorInventory.
+Tracks which resources are placed at which grid positions and provides
+queries for assessing preparedness. Domain-agnostic.
 
-The primary experimental knobs are:
+Experimental knobs:
   - Change resource density to see how agent preparedness assessments change.
   - Disable resources to simulate attrition.
   - Reduce resources to simulate budget constraints.
   - Query readiness to evaluate agent decision quality.
-
-The inventory is domain-agnostic — it works with any ResourceBase
-instance regardless of whether the domain is wildfire, ocean, or
-anything else.
-
-Differences from SensorInventory
-─────────────────────────────────
-  - No emit_all().  Resources don't produce events.
-  - No tick behavior.  Resources are static world state.
-  - Status transitions instead of failure modes.
-  - Capacity tracking and readiness queries.
 
 Placement model
 ───────────────

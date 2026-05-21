@@ -1,14 +1,14 @@
-"""Mock DataStore facade — assembles the five JSON-backed repositories.
+"""Mock DataStore facade — assembles the JSON-backed repositories.
 
 Drop-in replacement for PostgresDataStore when no database is available.
 
 Usage::
 
     from stores.mock import get_mock_data_store
-    from domains.wildfire.scenario_loader import load_scenario_from_db
+    from world.domains.wildfire.scenario_loader import start_world_service
 
     data_store = get_mock_data_store()
-    engine, sensors = load_scenario_from_db("lpnf-south", data_store)
+    engine = start_world_service(region_name="lpnf-south", data_store=data_store)
 """
 
 from __future__ import annotations
@@ -18,14 +18,12 @@ from stores.base import (
     DataStore,
     ResourceRepository,
     ScenarioPlanRepository,
-    SensorRepository,
     TerrainRepository,
     WildfireRepository,
 )
 from stores.mock.advisory_repo import MockAdvisoryRepository
 from stores.mock.resources_repo import MockResourceRepository
 from stores.mock.scenario_plan_repo import MockScenarioPlanRepository
-from stores.mock.sensor_repo import MockSensorRepository
 from stores.mock.terrain_repo import MockTerrainRepository
 from stores.mock.wildfire_repo import MockWildfireRepository
 
@@ -34,16 +32,11 @@ class MockDataStore(DataStore):
     """DataStore backed by static JSON files — no Postgres or PostGIS required."""
 
     def __init__(self) -> None:
-        self._sensors = MockSensorRepository()
         self._terrain = MockTerrainRepository()
         self._wildfires = MockWildfireRepository()
         self._resources = MockResourceRepository()
         self._advisories = MockAdvisoryRepository()
         self._scenario_plan = MockScenarioPlanRepository()
-
-    @property
-    def sensors(self) -> SensorRepository:
-        return self._sensors
 
     @property
     def terrain(self) -> TerrainRepository:

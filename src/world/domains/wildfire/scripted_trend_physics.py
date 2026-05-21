@@ -97,6 +97,10 @@ class ScriptedTrendPhysics(PhysicsModule[FireCellState]):
         # Resolved start values for start_value=None segments, captured on
         # first activation so a mid-ramp grid read can't feed back.
         self._resolved_start: dict[tuple[int, int, int, str, int], float] = {}
+        # Locations the most recent tick_physics() call wrote to. Consumed by
+        # iter_tick_events to produce TickChangeEvents. Empty before the first
+        # tick; replaced (not appended to) at the start of each tick.
+        self.last_changed_cells: set[tuple[int, int, int]] = set()
 
     def initial_cell_state(self, row: int, col: int, layer: int = 0) -> FireCellState:
         return FireCellState()
@@ -146,6 +150,7 @@ class ScriptedTrendPhysics(PhysicsModule[FireCellState]):
         environment: FireEnvironmentState,
         tick: int,
     ) -> list[StateEvent[FireCellState]]:
+        self.last_changed_cells = set()
         for (r, c, layer), segments in self._plan.items():
             cell = grid.get_cell(r, c, layer)
             state = cell.cell_state
@@ -180,6 +185,7 @@ class ScriptedTrendPhysics(PhysicsModule[FireCellState]):
                 updates[m] = round(self._clamp(m, v), 4)
 
             grid.update_cell_state(r, c, state.model_copy(update=updates), layer)
+            self.last_changed_cells.add((r, c, layer))
 
         return []
 

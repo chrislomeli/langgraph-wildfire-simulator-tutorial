@@ -10,20 +10,18 @@ from stores.base import (
     AdvisoryRepository,
     DataStore,
     ResourceRepository,
-    SensorRepository,
     TerrainConfig,
     TerrainRepository,
     WildfireRepository,
 )
 from stores.postgres.data_store import PostgresDataStore, get_postgres_data_store
-from stores.schemas import Resource, Sensor, Terrain, WildfireActivity
+from stores.schemas import Resource, Terrain, WildfireActivity
 
 __all__ = [
     # ABCs (the public contract)
     "AdvisoryRepository",
     "DataStore",
     "ResourceRepository",
-    "SensorRepository",
     "TerrainConfig",
     "TerrainRepository",
     "WildfireRepository",
@@ -32,7 +30,6 @@ __all__ = [
     "get_postgres_data_store",
     # Schemas
     "Resource",
-    "Sensor",
     "Terrain",
     "WildfireActivity",
 ]

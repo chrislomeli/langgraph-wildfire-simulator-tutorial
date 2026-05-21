@@ -16,11 +16,12 @@ The engine does NOT:
   - Know what domain it's simulating (fire, ocean, disease, etc.).
   - Interpret cell states or environment values.
   - Know about Kafka, LangGraph, or agents.
-  - Publish events to any bus.
-  - Run sensors automatically.
+  - Publish events to any bus directly — see ``tick_events.iter_tick_events``
+    for the locations-only notification stream.
 
-Sensors are separate objects managed by SensorInventory.  They
-read from the grid/environment when they need a measurement.
+Consumers (the advisory-service) read the world through the WorldView
+Protocol the engine implements; they never reach into ``engine.grid``.
+See [[pod-architecture]].
 
 Ground truth
 ────────────
@@ -61,9 +62,8 @@ class GenericGroundTruthSnapshot:
     """
     What was actually happening in the world at a given tick.
 
-    The agent never sees this.  It is used after the scenario for
-    evaluation: comparing what the agent thought was happening to
-    what was actually happening.
+    Used after the scenario for evaluation: comparing what the agent
+    decided to what was actually happening.
 
     tick            : which simulation tick this snapshot is from
     environment     : environment conditions at this tick (from to_dict())

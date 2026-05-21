@@ -5,7 +5,6 @@ from stores.postgres.data_store import PostgresDataStore
 from stores.postgres.gateway import PgGateway, get_pg_gateway
 from stores.postgres.resources_repo import TranscriptRepository
 from stores.postgres.scenario_plan_repo import ScenarioPlanRepository
-from stores.postgres.sensor_repo import SensorRepository
 from stores.postgres.terrain_repo import TerrainRepository
 from stores.postgres.wildfire_repo import WildfireRepository
 
@@ -15,7 +14,6 @@ __all__ = [
     "PostgresDataStore",
     "ResourceAdvisoryRepository",
     "ScenarioPlanRepository",
-    "SensorRepository",
     "TerrainRepository",
     "TranscriptRepository",
     "WildfireRepository",

@@ -1,7 +1,7 @@
 """Postgres-backed DataStore facade.
 
-Owns a single `PgGateway` and lazily exposes the five collection repos
-(sensors, terrain, wildfires, resources, advisories) as the typed
+Owns a single `PgGateway` and lazily exposes the collection repos
+(terrain, scenario_plan, wildfires, resources, advisories) as the typed
 handles declared in `stores.base.DataStore`.
 """
 
@@ -12,7 +12,6 @@ from stores.postgres.advisory_repo import ResourceAdvisoryRepository
 from stores.postgres.gateway import PgGateway
 from stores.postgres.resources_repo import TranscriptRepository
 from stores.postgres.scenario_plan_repo import ScenarioPlanRepository
-from stores.postgres.sensor_repo import SensorRepository
 from stores.postgres.terrain_repo import TerrainRepository
 from stores.postgres.wildfire_repo import WildfireRepository
 
@@ -22,7 +21,6 @@ class PostgresDataStore(DataStore):
 
     def __init__(self, pg_gateway: PgGateway | None = None):
         self._pg = pg_gateway or PgGateway()
-        self._sensors: SensorRepository | None = None
         self._terrain: TerrainRepository | None = None
         self._wildfires: WildfireRepository | None = None
         self._resources: TranscriptRepository | None = None
@@ -32,12 +30,6 @@ class PostgresDataStore(DataStore):
     @property
     def gateway(self) -> PgGateway:
         return self._pg
-
-    @property
-    def sensors(self) -> SensorRepository:
-        if self._sensors is None:
-            self._sensors = SensorRepository(self._pg)
-        return self._sensors
 
     @property
     def terrain(self) -> TerrainRepository:
