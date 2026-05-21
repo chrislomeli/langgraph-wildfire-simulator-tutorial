@@ -23,8 +23,12 @@ Run from the project root::
 
 from __future__ import annotations
 
+import datetime
+import json
 import logging
+import uuid
 
+from ulid import ULID
 from logging_config import configure_logging
 
 configure_logging(level=logging.INFO)
@@ -48,11 +52,19 @@ def call_advisory(event: TickChangeEvent) -> None:
     Later this becomes the handoff to advisory-service. Today it just
     proves the world-service is emitting the right notifications.
     """
-    print(
-        f"[advisory] tick={event.tick:>3}  "
-        f"changed={len(event.changed_cells):>4} cells  "
-        f"{event.changed_cells if len(event.changed_cells) <= 8 else str(event.changed_cells[:8]) + ' …'}"
-    )
+
+    cells = []
+    for cell in event.changed_cells:
+      cells.append(dict(row=cell[0], col=cell[1], layer=cell[2]))
+
+    payload = json.dumps(dict(id=str(uuid.uuid4()), tick=event.tick, timestamp=datetime.datetime.now().isoformat(), cells=cells), indent=2)
+    print(payload)
+
+    # print(
+    #     f"[advisory] tick={event.tick:>3}  "
+    #     f"changed={len(event.changed_cells):>4} cells  "
+    #     f"{event.changed_cells if len(event.changed_cells) <= 8 else str(event.changed_cells[:8]) + ' …'}"
+    # )
 
 
 def main() -> None:
@@ -76,6 +88,7 @@ def main() -> None:
 
         updated = 0
         for event in iter_tick_events(engine, horizon_ticks=HORIZON_TICKS):
+            print(f"\nTICK {event.tick}")
             call_advisory(event)
 
             # Writeback: keep the DB working copy current as we tick. Only the
