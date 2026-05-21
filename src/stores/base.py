@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from stores.schemas import Resource, ScenarioPlanSegment, Terrain, WildfireActivity
     from world.domains.wildfire.cell_state import FireCellState
+    from world.state_snapshot import CellStateSnapshot
 
 
 @dataclass
@@ -41,6 +42,17 @@ class CellStateRepository(ABC):
     def bootstrap(self, region: str, version: str, seed_version: str = "seed") -> int:
         """Reset the working copy: delete `version` rows, copy from `seed_version`.
         Returns the number of rows copied. Must refuse to target the seed group."""
+        ...
+
+    @abstractmethod
+    def write_state(
+        self, region: str, version: str, snapshots: list[CellStateSnapshot]
+    ) -> int:
+        """UPDATE the working-copy rows to match the snapshots' current state.
+
+        `cell_state` has one row per (version, grid_row, grid_column, layer,
+        region) — no tick column — so this writes 'current' state; the latest
+        snapshot per cell wins. Returns the number of rows updated."""
         ...
 
 

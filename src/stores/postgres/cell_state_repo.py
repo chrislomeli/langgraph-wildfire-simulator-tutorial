@@ -9,11 +9,29 @@ world-service mutates that working copy; the seed is never touched.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from stores.base import CellStateRepository as CellStateRepositoryBase
 from stores.postgres.gateway import PgGateway
 
+if TYPE_CHECKING:
+    from world.state_snapshot import CellStateSnapshot
+
 logger = logging.getLogger(__name__)
+
+# Mutable cell_state columns the world-service writes back. Terrain-static
+# fields (terrain_type, slope) and fields with no cell_state column
+# (fire_state, Rothermel metrics) are deliberately excluded.
+_WRITEBACK_COLUMNS = (
+    "temperature_c",
+    "humidity_pct",
+    "wind_speed_mps",
+    "wind_direction_deg",
+    "pressure_hpa",
+    "fuel_moisture",
+    "fire_intensity",
+    "vegetation",
+)
 
 
 class CellStateRepository(CellStateRepositoryBase):
@@ -75,3 +93,36 @@ class CellStateRepository(CellStateRepositoryBase):
             seed_version,
         )
         return inserted
+
+    def write_state(
+        self, region: str, version: str, snapshots: list[CellStateSnapshot]
+    ) -> int:
+        if version == "seed":
+            raise ValueError("Refusing to write state onto the 'seed' group.")
+        if not snapshots:
+            return 0
+
+        set_clause = ",\n            ".join(f"{c} = %({c})s" for c in _WRITEBACK_COLUMNS)
+        sql = f"""
+        update cell_state set
+            {set_clause}
+        where region      = %(region)s
+          and version     = %(version)s
+          and grid_row    = %(grid_row)s
+          and grid_column = %(grid_column)s
+          and layer       = %(layer)s
+        """
+        params = [
+            {
+                "region": region,
+                "version": version,
+                "grid_row": s.grid_row,
+                "grid_column": s.grid_column,
+                "layer": s.layer,
+                **{c: s.state.get(c) for c in _WRITEBACK_COLUMNS},
+            }
+            for s in snapshots
+        ]
+        with self._pg.conn() as conn, conn.cursor() as cur:
+            cur.executemany(sql, params)
+            return cur.rowcount

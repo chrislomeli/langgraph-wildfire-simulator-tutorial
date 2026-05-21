@@ -31,6 +31,7 @@ configure_logging(level=logging.INFO)
 
 from stores import get_postgres_data_store  # noqa: E402
 from world import iter_tick_events  # noqa: E402
+from world.state_snapshot import CellStateSnapshot  # noqa: E402
 from world.tick_events import TickChangeEvent  # noqa: E402
 from world.domains.wildfire.scenario_loader import start_world_service  # noqa: E402
 
@@ -73,12 +74,33 @@ def main() -> None:
             HORIZON_TICKS,
         )
 
+        updated = 0
         for event in iter_tick_events(engine, horizon_ticks=HORIZON_TICKS):
             call_advisory(event)
 
+            # Writeback: keep the DB working copy current as we tick. Only the
+            # cells that changed this tick are written (current state, no
+            # history — cell_state has no tick column). This is what the
+            # advisory-service reads as ground truth once it's a separate pod.
+            if event.changed_cells:
+                snapshots = [
+                    CellStateSnapshot(
+                        tick=event.tick,
+                        grid_row=r,
+                        grid_column=c,
+                        layer=layer,
+                        state=engine.get_cell(r, c, layer).cell_state.model_dump(),
+                    )
+                    for (r, c, layer) in event.changed_cells
+                ]
+                updated += data_store.cell_state.write_state(
+                    region=REGION, version=VERSION, snapshots=snapshots
+                )
+
         logger.info(
-            "world-service done: %d snapshots accumulated in state_snapshot_log",
+            "world-service done: %d snapshots in log, %d cell-writes to DB",
             len(engine.state_snapshot_log),
+            updated,
         )
     finally:
         # Drain the connection pool so its worker threads shut down cleanly
