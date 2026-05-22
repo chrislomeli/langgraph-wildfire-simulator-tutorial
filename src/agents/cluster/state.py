@@ -72,6 +72,8 @@ class ClusterAgentState(TracedState):
     # evaluate node reads and writes here via the ToolNode loop.
     messages: Annotated[list[BaseMessage], add_messages] = Field(default_factory=list)
 
+    anchor_row: int
+    anchor_column: int
     updated_cells: list[UpdatedCell] = Field(default_factory=list)
     selected_cells: list[EvaluationCell] = Field(default_factory=list)
     escalation: Escalation | None  = Field(default=None)

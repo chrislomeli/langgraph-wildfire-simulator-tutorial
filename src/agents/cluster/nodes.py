@@ -212,7 +212,9 @@ def make_evaluate_node(
             return {
                 "escalation": Escalation(
                     sector_id=state.sector_id,
-                    escalate=False,
+                    anchor_column=state.anchor_column,
+                    anchor_row=state.anchor_row,
+                    escalate=True,
                     confidence=3,
                     contributing_factors=["this is a dummy escalation"]
                 ),

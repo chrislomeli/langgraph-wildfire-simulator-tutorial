@@ -194,7 +194,7 @@ class GenericWorldEngine(Generic[C]):
         self,
         centers: list[tuple[int, int]],
         radius: int = 1,
-    ) -> list[list[tuple[int, int]]]:
+    ) -> dict[tuple[int, int], list[tuple[int, int]]] :
         """Expand changed-cell coordinates into merged, in-bounds sectors.
 
         Each center grows into a (2*radius+1) square halo clamped to the grid.
@@ -202,7 +202,7 @@ class GenericWorldEngine(Generic[C]):
         cell is ever evaluated twice. Returns one sorted, deduped coordinate
         list per region (coordinates only — callers resolve them via get_sector).
         """
-        halos: list[set[tuple[int, int]]] = []
+        halos: dict[tuple[int, int], list[tuple[int, int]]] = {}
         for center_row, center_col in centers:
             halo = {
                 (row, col)
@@ -211,17 +211,19 @@ class GenericWorldEngine(Generic[C]):
                 if 0 <= row < self.rows and 0 <= col < self.cols
             }
             if halo:
-                halos.append(halo)
+                halos[(center_row, center_col)] = list(halo)
+        return halos
 
-        merged: list[set[tuple[int, int]]] = []
-        for halo in halos:
-            overlapping = [region for region in merged if region & halo]
-            for region in overlapping:
-                merged.remove(region)
-                halo |= region
-            merged.append(halo)
-
-        return [sorted(region) for region in merged]
+        # todo - overlap is not working and messes up centers
+        # merged: dict[tuple[int, int], set[tuple[int, int]]] = {}
+        # for halo in halos:
+        #     overlapping = [region for region in merged if region & halo]
+        #     for region in overlapping:
+        #         merged.remove(region)
+        #         halo |= region
+        #     merged.append(halo)
+        #
+        # return [sorted(region) for region in merged]
 
     def get_bounding(self):
         return self.rows, self.cols

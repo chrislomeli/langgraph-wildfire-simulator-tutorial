@@ -64,11 +64,13 @@ def make_fan_out_to_clusters(world_engine: GenericWorldEngine):
         )
 
         sends: list[Send] = []
-        for region in sectors:
-            anchor_row, anchor_col = region[0]
+        for center, region in sectors.items():
+            anchor_row, anchor_col = center[0], center[1]
             sector_id = f"sector({anchor_row},{anchor_col})"
             cell_state = ClusterAgentState(
                 sector_id=sector_id,
+                anchor_row=anchor_row,
+                anchor_column=anchor_col,
                 workflow_id=f"{sector_id}::supervisor-fanout",
                 updated_cells=[UpdatedCell(row=row, col=col, layer=0) for row, col in region],
                 error=None,
@@ -197,7 +199,6 @@ def make_dispatch_commands(store: BaseStore | None = None):
 # Must match the risk_threshold passed to make_sector_analysis_node.
 # If sector_analysis won't find a hotspot, there's nothing for logistics to do.
 LOGISTICS_RISK_THRESHOLD = 5
-
 
 def route_after_assess(state: SupervisorState) -> str:
     """Conditional edge after assess_situation.

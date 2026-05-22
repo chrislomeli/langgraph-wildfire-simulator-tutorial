@@ -154,6 +154,8 @@ class RiskAssessment(BaseModel):
 class Escalation(BaseModel):
     """Fire risk score for an individual cell."""
     sector_id: str
+    anchor_row: int
+    anchor_column: int
     escalate: bool = Field(
         description="TRUE if there is adequate risk that we should look at, and perhaps move existing fire fighting resources "
     )
