@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import logging
 
-from agents.commons.schemas import Colors, ResourceAdvisory, ResourceAdvisoryRecord
+from agents.commons.schemas import Colors
 from stores.base import AdvisoryRepository
+from stores.schemas import ResourceAdvisory, ResourceAdvisoryRecord
 
 logger = logging.getLogger(__name__)
 

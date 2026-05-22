@@ -18,6 +18,7 @@ time. This keeps the module free of side effects at import time.
 """
 
 import logging
+import uuid
 
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
@@ -30,6 +31,8 @@ from agents.commons.schemas import CellReadings, CollatedRecordRisk
 from agents.commons.state_types import StatusValue
 from agents.logistics.state import LogisticsAgentState
 from agents.supervisor.state import RiskScore, SupervisorState
+from controllers.schemas import AdvisoryRequest, UpdatedCell
+from world import GenericWorldEngine
 
 logger = logging.getLogger(__name__)
 
@@ -37,40 +40,44 @@ logger = logging.getLogger(__name__)
 # ── Conditional edge: dynamic fan-out ────────────────────────────────────────
 
 
-@node_executor("fan_out_to_clusters")
-def fan_out_to_clusters(state: SupervisorState) -> list[Send]:
-    """Dynamic fan-out — one ``Send`` per active cluster.
+def make_fan_out_to_clusters(world_engine: GenericWorldEngine):
+    """Factory for the dynamic fan-out conditional edge.
 
-    NOTE: This is NOT a regular node. It is a conditional-edge function
-    attached to ``START``. LangGraph interprets the returned list of
-    ``Send()`` objects as: "run all of these targets in parallel, then
-    merge their state updates via the registered reducers."
-
-    Each ``Send`` targets ``run_cluster_agent`` with a
-    ``ClusterAgentState`` pre-populated with that cluster's CellReadings.
-    After all parallel invocations complete (the synchronization barrier),
-    LangGraph advances to ``assess_situation`` with the accumulated
-    ``cluster_score`` and ``cluster_findings``.
+    Closes over the world engine so sector geometry (halo expansion and
+    merging of overlapping halos) is delegated to ``world_engine.expand_sectors``.
     """
-    clusters: dict[str, list[CellReadings]] = state.clusters
-    cluster_ids = list(clusters.keys())
-    logger.info(
-        "Supervisor fanning out to %d cluster(s): %s",
-        len(cluster_ids),
-        cluster_ids,
-    )
 
-    sends: list[Send] = []
-    for cluster_id, readings in clusters.items():
-        cluster_state = ClusterAgentState(
-            cluster_id=cluster_id,
-            workflow_id=f"{cluster_id}::supervisor-fanout",
-            readings=readings,
-            error=None,
+    @node_executor("fan_out_to_clusters")
+    def fan_out_to_clusters(state: SupervisorState) -> list[Send]:
+        """Dynamic fan-out — one ``Send`` per merged sector.
+
+        NOT a regular node: it is a conditional-edge function attached to
+        ``START``. LangGraph runs the returned ``Send``s in parallel, then
+        advances to ``assess_situation`` once they complete.
+        """
+        changed = state.updates
+        sectors = world_engine.expand_sectors([(c.row, c.col) for c in changed])
+        logger.info(
+            "Supervisor fanning out %d changed cell(s) into %d sector(s)",
+            len(changed),
+            len(sectors),
         )
-        sends.append(Send("run_cluster_agent", cluster_state))
 
-    return sends
+        sends: list[Send] = []
+        for region in sectors:
+            anchor_row, anchor_col = region[0]
+            sector_id = f"sector({anchor_row},{anchor_col})"
+            cell_state = ClusterAgentState(
+                sector_id=sector_id,
+                workflow_id=f"{sector_id}::supervisor-fanout",
+                updated_cells=[UpdatedCell(row=row, col=col, layer=0) for row, col in region],
+                error=None,
+            )
+            sends.append(Send("run_cluster_agent", cell_state))
+
+        return sends
+
+    return fan_out_to_clusters
 
 
 # ── Stateful nodes (factories) ───────────────────────────────────────────────
@@ -80,30 +87,20 @@ def make_run_cluster_agent(cluster_graph: CompiledStateGraph):
     """Factory that closes over the compiled cluster subgraph.
 
     The supervisor invokes the cluster subgraph once per ``Send`` emitted
-    by ``fan_out_to_clusters``. Results are lifted into supervisor state:
-      - ``cluster_findings`` receives the list of CollatedRecordRisk objects.
-      - ``cluster_score`` receives the highest risk_score in that list
-        (0 if the list is empty).
-
-    Both fields use reducers so parallel sends merge cleanly.
+    by ``fan_out_to_clusters``. Each invocation's ``escalation`` is lifted
+    into the supervisor's ``escalations`` list, which uses an ``operator.add``
+    reducer so parallel sends concatenate cleanly.
     """
 
     @node_executor("run_cluster_agent")
     async def run_cluster_agent(state: ClusterAgentState) -> dict:
-        cluster_id = state.cluster_id
-        logger.info("Supervisor invoking cluster agent for cluster=%s", cluster_id)
+        sector_id = state.sector_id
+        logger.info("Supervisor invoking cluster agent for cluster=%s", sector_id)
 
         result = await cluster_graph.ainvoke(state)
-        assessments: list[CollatedRecordRisk] = result.get("risk_assessments", [])
-        if assessments:
-            highest = max(assessments, key=lambda r: r.risk_score)
-            cluster_score = RiskScore(risk_score=highest.risk_score, confidence=highest.confidence)
-        else:
-            cluster_score = RiskScore(risk_score=0, confidence=0)
-
+        escalation = result["escalation"]
         return {
-            "cluster_findings": {cluster_id: assessments},
-            "cluster_score": {cluster_id: cluster_score},
+            "escalations": [escalation] if escalation else [],
         }
 
     return run_cluster_agent
@@ -120,12 +117,12 @@ def assess_situation(state: SupervisorState) -> dict:
     Store, call an LLM to correlate findings across clusters, and detect
     cross-cluster patterns (e.g. one large event vs many isolated ones).
     """
-    findings = state.cluster_findings
-    cluster_ids = list(state.clusters.keys())
+    escalations = state.escalations
+    escalated = [e for e in escalations if e.escalate]
 
-    summary = (
-        f"[STUB] Received findings from {len(findings)} cluster(s) ({len(cluster_ids)} active)."
-    )
+    summary = f"[STUB] {len(escalated)} of {len(escalations)} sector(s) flagged for escalation."
+    if escalated:
+        summary += " Escalating: " + ", ".join(e.sector_id for e in escalated) + "."
 
     return {
         "situation_summary": summary,
@@ -213,25 +210,16 @@ def route_after_assess(state: SupervisorState) -> str:
       "run_logistics_agent"  — at least one cluster scored >= LOGISTICS_RISK_THRESHOLD
       "dispatch_commands"    — all scores below threshold, or no scores at all
     """
-    if not state.cluster_score:
-        logger.info("route_after_assess: no cluster scores — skipping logistics")
-        return "dispatch_commands"
-
-    max_score = max(rs.risk_score for rs in state.cluster_score.values())
-    if max_score >= LOGISTICS_RISK_THRESHOLD:
+    escalated = [e for e in state.escalations if e.escalate]
+    if escalated:
         logger.info(
-            "route_after_assess: max score %d >= %d — invoking logistics agent",
-            max_score,
-            LOGISTICS_RISK_THRESHOLD,
+            "route_after_assess: %d sector(s) escalated — invoking logistics agent",
+            len(escalated),
         )
         return "run_logistics_agent"
 
-    logger.info(
-        "route_after_assess: max score %d < %d — skipping logistics",
-        max_score,
-        LOGISTICS_RISK_THRESHOLD,
-    )
-    return route_base(state, next_node="dispatch_commands")
+    logger.info("route_after_assess: no sectors escalated — skipping logistics")
+    return "dispatch_commands"
 
 
 def route_after_decide(state: SupervisorState) -> str:

@@ -13,7 +13,7 @@ risk pipeline:
 CellStateManager maintains a running per-cell snapshot of the latest
 metrics, decides when a cell should re-evaluate, writes the values onto
 the world grid (session ground truth), and emits a CellReadings envelope
-(cluster_id + position) per triggered cell. The cluster agent's
+(sector_id + position) per triggered cell. The cluster agent's
 update_world node reads that grid ground truth, then evaluate produces
 RiskAssessments and writes them back onto each GenericCell.
 
@@ -34,14 +34,13 @@ GridPosition follows GenericTerrainGrid's convention:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import Literal
-from uuid import UUID, uuid4
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
 from agents.commons.node_types import NodeError
 from agents.commons.state_types import StatusValue
+from controllers.schemas import UpdatedCell
 from world.domains.wildfire import FireCellState
 
 
@@ -117,8 +116,8 @@ class Metric(BaseModel):
         ge=0.0,
         le=1.0,
         description="Combined reliability: sensor confidence × distance decay. "
-        "1.0 = sensor is at this cell with full health. "
-        "0.0 = reading is unreliable for this cell.",
+                    "1.0 = sensor is at this cell with full health. "
+                    "0.0 = reading is unreliable for this cell.",
     )
     source_id: str = Field(description="Which sensor produced this reading")
     position: GridPosition = Field(description="Where the sensor sits on the grid")
@@ -131,14 +130,14 @@ class Metric(BaseModel):
 class CellReadings(BaseModel):
     """Identifies a single triggered cell (cluster + position).
 
-    The orchestrator groups CellReadings by cluster_id and the supervisor
+    The orchestrator groups CellReadings by sector_id and the supervisor
     fans them out to per-cluster agents. Metric values are written onto
     the world grid upstream by CellStateManager.update(); update_world
     reads that grid ground truth by position — values are no longer
     carried in this envelope.
     """
 
-    cluster_id: str = Field(description="Which cluster this cell belongs to")
+    sector_id: str = Field(description="Which cluster this cell belongs to")
     position: GridPosition = Field(description="Grid coordinates of the cell")
 
 
@@ -149,6 +148,25 @@ class RiskAssessment(BaseModel):
     collated_record_risks: list[CollatedRecordRisk] = Field(
         description="A risk assessment for each cell in the provided cluster",
         default_factory=list,
+    )
+
+
+class Escalation(BaseModel):
+    """Fire risk score for an individual cell."""
+    sector_id: str
+    escalate: bool = Field(
+        description="TRUE if there is adequate risk that we should look at, and perhaps move existing fire fighting resources "
+    )
+
+    confidence: int = Field(
+        ge=0,
+        le=3,
+        description="confidence in risk_score",
+    )
+    contributing_factors: list[str] = Field(
+        default_factory=list,
+        description="What drove the assessment: e.g. ['temp=52°C (>38 threshold)', "
+                    "'humidity=12% (<15 critical)', 'terrain=grassland (high fuel)']",
     )
 
 
@@ -170,13 +188,13 @@ class CollatedRecordRisk(BaseModel):
     )
     confidence_rationale: str = Field(
         description="Why the agent chose this confidence level. "
-        "e.g. 'Based on 2/3 sensor types with strong signal; "
-        "wind data inferred from 6-hour forecast tool.'"
+                    "e.g. 'Based on 2/3 sensor types with strong signal; "
+                    "wind data inferred from 6-hour forecast tool.'"
     )
     contributing_factors: list[str] = Field(
         default_factory=list,
         description="What drove the assessment: e.g. ['temp=52°C (>38 threshold)', "
-        "'humidity=12% (<15 critical)', 'terrain=grassland (high fuel)']",
+                    "'humidity=12% (<15 critical)', 'terrain=grassland (high fuel)']",
     )
 
 
@@ -194,75 +212,24 @@ class CellRiskAssessment(BaseModel):
     confidence_rationale: str = Field(default="", description="Reasoning for tracing/debug")
 
 
+class EvaluationCell(BaseModel):
+    row: int
+    col: int
+    layer: int
+    attributes: dict
+    state: FireCellState
+
+
+
+
+class EvaluationCells(BaseModel):
+    updated_cell: UpdatedCell
+    sector: list[EvaluationCell]
+
+
 class FireCell(BaseModel):
     row: int
     col: int
     cell_state: FireCellState
     layer: int
     attributes: dict[str, int] | None = None
-
-
-
-# Agent view of a published advisory
-class ResourceAdvisory(BaseModel):
-    """Structured advisory report for resource deployment decisions."""
-
-    epicenter_row: int = Field(
-        description="Terrain grid row index of the fire risk epicenter (highest-risk cell)."
-    )
-
-    epicenter_column: int = Field(
-        description="Terrain grid column index of the fire risk epicenter (highest-risk cell)."
-    )
-
-    location_description: str = Field(
-        description="Human-readable description of the affected area, especially for impact zones difficult to describe in grid coordinates (e.g., 'northwest slope below ridgeline')."
-    )
-    situation: str = Field(
-        description="Current fire status, spread direction, and immediate threat level. 1-2 sentences."
-    )
-
-    urgency_level: int = Field(
-        ge=1,
-        le=4,
-        description="""How urgent and immediate is this situation?
-
-LEVEL 4 (Fade Out): Lowest readiness; routine monitoring.
-LEVEL 3 (Double Take): Elevated readiness; increased monitoring.
-LEVEL 2 (Fast Pace): High readiness; prepare for deployment.
-LEVEL 1 (Cocked Pistol): Maximum readiness; imminent response required.
-""",
-    )
-    notes: str = Field(
-        description=(
-            "Context, uncertainties, and edge-case reasoning. "
-            "Discuss resource conflicts, conditional scenarios, or cascading risks. "
-            "Example: '3 engines committed to 30%-contained Lompoc fire. "
-            "If 2+ hotspots ignite simultaneously, Level 1 capacity exceeded.'"
-        )
-    )
-    recommendation: str = Field(
-        description="Specific action to take, or 'Monitor only' if no deployment needed."
-    )
-
-
-# Database view of the ResourceAdvisory adds tracking fields
-class ResourceAdvisoryRecord(ResourceAdvisory):
-    id: UUID = Field(default_factory=uuid4, description="Unique identifier. Generated on creation.")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    status: Literal["SENT", "SUPPRESSED", "ACKNOWLEDGED"] = Field(default="SENT")
-
-    def to_db_row(self) -> tuple:
-        """Return tuple for INSERT/UPDATE — computed fields excluded."""
-        return (
-            self.id,
-            self.created_at,
-            self.status,
-            self.epicenter_row,
-            self.epicenter_column,
-            self.location_description,
-            self.situation,
-            self.urgency_level,
-            self.notes,
-            self.recommendation,
-        )

@@ -13,10 +13,16 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from stores.schemas import Resource, ScenarioPlanSegment, Terrain, WildfireActivity
+    from stores.schemas import (
+        Resource,
+        ResourceAdvisoryRecord,
+        ScenarioPlanSegment,
+        Terrain,
+        WildfireActivity,
+    )
     from world.domains.wildfire.cell_state import FireCellState
     from world.state_snapshot import CellStateSnapshot
 
@@ -95,18 +101,16 @@ class ResourceRepository(ABC):
 
 
 class AdvisoryRepository(ABC):
-    # Records are produced by the agent layer (ResourceAdvisoryRecord). Typed
-    # as Any here to keep stores/ free of agent imports.
     @abstractmethod
-    def save_advisory(self, advisory: Any) -> int: ...
+    def save_advisory(self, advisory: ResourceAdvisoryRecord) -> int: ...
 
     @abstractmethod
-    def save_advisories(self, advisories: list[Any]) -> int: ...
+    def save_advisories(self, advisories: list[ResourceAdvisoryRecord]) -> int: ...
 
     @abstractmethod
     def fetch_recent_advisories(
         self, grid_row: int, grid_col: int, limit: int = 10
-    ) -> list[Any]: ...
+    ) -> list[ResourceAdvisoryRecord]: ...
 
 
 class ScenarioPlanRepository(ABC):

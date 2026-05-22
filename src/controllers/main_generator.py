@@ -46,7 +46,7 @@ VERSION = "simulation"
 HORIZON_TICKS = 30
 
 
-def call_advisory(event: TickChangeEvent) -> None:
+def call_advisory(region: str, version: str, event: TickChangeEvent) -> None:
     """Event sink. Stub: dump the payload.
 
     Later this becomes the handoff to advisory-service. Today it just
@@ -55,41 +55,40 @@ def call_advisory(event: TickChangeEvent) -> None:
 
     cells = []
     for cell in event.changed_cells:
-      cells.append(dict(row=cell[0], col=cell[1], layer=cell[2]))
+        cells.append(dict(row=cell[0], col=cell[1], layer=cell[2]))
 
-    payload = json.dumps(dict(id=str(uuid.uuid4()), tick=event.tick, timestamp=datetime.datetime.now().isoformat(), cells=cells), indent=2)
+    payload = json.dumps(
+        dict(id=str(uuid.uuid4()),
+             region=region,
+             version=version,
+             tick=event.tick, timestamp=datetime.datetime.now().isoformat(), cells=cells),
+        indent=2)
     print(payload)
 
-    # print(
-    #     f"[advisory] tick={event.tick:>3}  "
-    #     f"changed={len(event.changed_cells):>4} cells  "
-    #     f"{event.changed_cells if len(event.changed_cells) <= 8 else str(event.changed_cells[:8]) + ' …'}"
-    # )
 
-
-def main() -> None:
+def generate_world_events(region: str, version: str, horizon_ticks: int) -> None:
     data_store = get_postgres_data_store()
     try:
         engine = start_world_service(
-            region_name=REGION,
-            version=VERSION,
+            region_name=region,
+            version=version,
             data_store=data_store,
             bootstrap=True,  # copy seed → working copy, then run
         )
 
         logger.info(
             "world-service running: region=%r version=%r grid=%dx%d horizon=%d",
-            REGION,
-            VERSION,
+            region,
+            version,
             engine.rows,
             engine.cols,
-            HORIZON_TICKS,
+            horizon_ticks,
         )
 
         updated = 0
-        for event in iter_tick_events(engine, horizon_ticks=HORIZON_TICKS):
+        for event in iter_tick_events(engine, horizon_ticks=horizon_ticks):
             print(f"\nTICK {event.tick}")
-            call_advisory(event)
+            call_advisory(region, version, event)
 
             # Writeback: keep the DB working copy current as we tick. Only the
             # cells that changed this tick are written (current state, no
@@ -107,7 +106,7 @@ def main() -> None:
                     for (r, c, layer) in event.changed_cells
                 ]
                 updated += data_store.cell_state.write_state(
-                    region=REGION, version=VERSION, snapshots=snapshots
+                    region=region, version=version, snapshots=snapshots
                 )
 
         logger.info(
@@ -122,4 +121,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    generate_world_events(region=REGION, version=VERSION, horizon_ticks=HORIZON_TICKS)

@@ -52,19 +52,4 @@ class GridRiskView:
         self._grid = grid
 
     def hotspots(self, min_score: int) -> list[RiskHotspot]:
-        from agents.commons.schemas import CellRiskAssessment
-
-        found: list[RiskHotspot] = []
-        for row in range(self._grid.rows):
-            for col in range(self._grid.cols):
-                cell = self._grid.get_cell(row, col)
-                assessment = cell.risk_assessment
-                if not isinstance(assessment, CellRiskAssessment):
-                    continue
-                if assessment.risk_score >= min_score:
-                    found.append(
-                        RiskHotspot(
-                            row, col, assessment.risk_score, assessment.confidence
-                        )
-                    )
-        return found
+        pass

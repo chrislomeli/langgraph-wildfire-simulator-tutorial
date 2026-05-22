@@ -24,24 +24,28 @@ State design principles
 
 Node responsibilities
 ──────────────────────
-  evaluate    : Reads collated_records; produces risk_assessments (one per
+  evaluate    : Reads collated_records; produces escalations (one per
                 cell). Stub mode: deterministic placeholder scores. LLM mode:
                 single LLM call with structured output (enabled in next milestone).
-  report_risk : Persists risk_assessments to the optional store and marks
+  report_risk : Persists escalations to the optional store and marks
                 the pipeline COMPLETED.
 """
 
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, NewType
+from http.client import LineTooLong
+from typing import Annotated, NewType, Any
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import Field
+from pydantic import Field, BaseModel
 
-from agents.commons.schemas import CellReadings, CollatedRecordRisk, TracedState
+from agents.commons.schemas import CellReadings, CollatedRecordRisk, TracedState, Escalation, EvaluationCell
+from controllers.schemas import AdvisoryRequest, UpdatedCell
+from world import GenericCell
+from world.domains.wildfire import FireCellState
 
 # ── Typed graph ────────────────────────────────────────────────────
 StreamingRiskGraph = NewType("StreamingRiskGraph", CompiledStateGraph)
@@ -60,7 +64,7 @@ class ClusterAgentState(TracedState):
     """
 
     # ── Identity ──────────────────────────────────────────────────────
-    cluster_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    sector_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     workflow_id: str
 
     # ── LLM tool loop ─────────────────────────────────────────────────
@@ -68,12 +72,17 @@ class ClusterAgentState(TracedState):
     # evaluate node reads and writes here via the ToolNode loop.
     messages: Annotated[list[BaseMessage], add_messages] = Field(default_factory=list)
 
+    updated_cells: list[UpdatedCell] = Field(default_factory=list)
+    selected_cells: list[EvaluationCell] = Field(default_factory=list)
+    escalation: Escalation | None  = Field(default=None)
+
     # ── Risk pipeline fields ──────────────────────────────────────────
     # Supervisor pre-populates ``readings`` before invoking the subgraph.
     # update_world reads ``readings``, writes metric values onto the world
     # grid, and emits ``updated_cells`` (list of cell snapshot dicts).
-    # evaluate reads ``updated_cells`` and writes ``risk_assessments``.
-    # report_risk reads ``risk_assessments`` and persists them.
+    # evaluate reads ``updated_cells`` and writes ``escalations``.
+    # report_risk reads ``escalations`` and persists them.
+
+
+
     readings: list[CellReadings] = Field(default_factory=list)
-    updated_cells: list[dict] = Field(default_factory=list)
-    risk_assessments: list[CollatedRecordRisk] = Field(default_factory=list)

@@ -27,7 +27,8 @@ from pydantic import Field
 
 from pydantic import BaseModel
 
-from agents.commons.schemas import CollatedRecordRisk, TracedState, ResourceAdvisory
+from agents.commons.schemas import CollatedRecordRisk, TracedState
+from stores.schemas import ResourceAdvisory
 
 LogisticsGraph = NewType("LogisticsGraph", CompiledStateGraph)
 

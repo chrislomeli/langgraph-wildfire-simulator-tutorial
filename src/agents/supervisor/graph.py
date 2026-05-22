@@ -44,8 +44,8 @@ from agents.commons.agent_dependencies import AgentDependencies
 from agents.logistics.graph import build_logistics_agent_graph
 from agents.supervisor.nodes import (
     assess_situation,
-    fan_out_to_clusters,
     make_dispatch_commands,
+    make_fan_out_to_clusters,
     make_run_cluster_agent,
     make_run_logistics_agent,
     route_after_assess,
@@ -77,7 +77,9 @@ def build_supervisor_graph(*, agent_dependencies: AgentDependencies) -> Supervis
     # fan_out_to_clusters returns list[Send] — must be a conditional edge,
     # NOT a regular node. LangGraph interprets the Sends as parallel
     # dispatches to "run_cluster_agent".
-    builder.add_conditional_edges(START, fan_out_to_clusters, ["run_cluster_agent"])
+    builder.add_conditional_edges(
+        START, make_fan_out_to_clusters(agent_dependencies.world_engine), ["run_cluster_agent"]
+    )
 
     # After all parallel cluster agents finish (synchronization barrier):
     # assess the situation, call logistics agent for a deployment plan, dispatch.

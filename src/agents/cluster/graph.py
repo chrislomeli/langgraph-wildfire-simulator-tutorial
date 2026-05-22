@@ -27,8 +27,8 @@ from langgraph.graph import END, START, StateGraph
 from agents.cluster.nodes import (
     make_evaluate_node,
     make_report_risk_node,
-    make_update_world_state,
-    route_after_evaluate,
+    make_apply_thresholds,
+    route_after_evaluate, route_after_filter,
 )
 from agents.cluster.state import ClusterAgentState, StreamingRiskGraph
 from agents.commons.agent_dependencies import AgentDependencies
@@ -67,7 +67,7 @@ def build_cluster_agent_graph(
 
     builder.add_node(
         "update_world",
-        make_update_world_state(
+        make_apply_thresholds(
             world_engine=agent_deps.world_engine,
         ),
     )
@@ -86,7 +86,7 @@ def build_cluster_agent_graph(
     )
 
     builder.add_edge(START, "update_world")
-    builder.add_edge("update_world", "evaluate")
+    builder.add_conditional_edges("update_world", route_after_filter)
     builder.add_conditional_edges("evaluate", route_after_evaluate)
     builder.add_edge("report_risk", END)
 

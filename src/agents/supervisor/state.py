@@ -40,6 +40,7 @@ Node responsibilities
 
 from __future__ import annotations
 
+import operator
 import uuid
 from typing import Annotated, Any, NewType
 
@@ -48,7 +49,8 @@ from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 
-from agents.commons.schemas import CellReadings, CollatedRecordRisk, TracedState
+from agents.commons.schemas import CellReadings, CollatedRecordRisk, TracedState, Escalation
+from controllers.schemas import AdvisoryRequest, UpdatedCell
 
 # ── Typed graph ────────────────────────────────────────────────────
 SupervisorGraph = NewType("SupervisorGraph", CompiledStateGraph)
@@ -64,7 +66,7 @@ class ActuatorCommand(BaseModel):
 
     command_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     command_type: str
-    cluster_id: str
+    sector_id: str
     payload: dict[str, Any] = Field(default_factory=dict)
     priority: int = 3
 
@@ -78,9 +80,9 @@ def max_cluster_score(
 ) -> dict[str, RiskScore]:
 
     merged = dict(existing)
-    for cluster_id, score in incoming.items():
-        current = merged.get(cluster_id)
-        merged[cluster_id] = (
+    for sector_id, score in incoming.items():
+        current = merged.get(sector_id)
+        merged[sector_id] = (
             max([current, score], key=lambda s: s.risk_score if s else -1) if current else score
         )
     return merged
@@ -96,8 +98,8 @@ def merge_cluster_findings(
     the incoming entry for a cluster always replaces the prior value.
     """
     merged = dict(existing)
-    for cluster_id, risks in incoming.items():
-        merged[cluster_id] = risks
+    for sector_id, risks in incoming.items():
+        merged[sector_id] = risks
     return merged
 
 
@@ -120,7 +122,13 @@ class SupervisorState(TracedState):
     workflow_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
     # ── Input ────────────────────────────────────────────────────────
+    updates: list[UpdatedCell] = Field(default_factory=list)
+    escalations:  Annotated[list[Escalation], operator.add] = Field(default_factory=list)
+
+
+    # ── Input Legacy────────────────────────────────────────────────────────
     clusters: dict[str, list[CellReadings]] = Field(default_factory=dict)
+
 
     # ── Aggregated output of cluster fan-out ─────────────────────────
     cluster_score: Annotated[dict[str, RiskScore], max_cluster_score] = Field(default_factory=dict)

@@ -7,7 +7,7 @@ from agents.cluster.graph import build_cluster_agent_graph
 from agents.cluster.nodes import (
     make_evaluate_node,
     make_report_risk_node,
-    make_update_world_state,
+    make_apply_thresholds,
     route_after_evaluate,
 )
 from agents.cluster.state import ClusterAgentState
@@ -45,7 +45,7 @@ class TestClusterAgentState:
         assert state.cluster_id == "c1"
         assert state.workflow_id == "w1"
         assert state.readings == []
-        assert state.risk_assessments == []
+        assert state.escalated_cells == []
         assert state.messages == []
         assert state.status == StatusValue.IDLE
 
@@ -65,7 +65,7 @@ class TestEvaluateNode:
         )
         state = _make_state()
         result = await evaluate(state)
-        assert result["risk_assessments"] == []
+        assert result["escalations"] == []
         assert result["status"] == StatusValue.PROCESSING
 
     async def test_stub_produces_one_risk_per_cell(self, agent_deps):
@@ -77,8 +77,8 @@ class TestEvaluateNode:
         cells = [{"row": 0, "col": 0}, {"row": 0, "col": 1}]
         state = _make_state(updated_cells=cells)
         result = await evaluate(state)
-        assert len(result["risk_assessments"]) == 2
-        for risk in result["risk_assessments"]:
+        assert len(result["escalations"]) == 2
+        for risk in result["escalations"]:
             assert isinstance(risk, CollatedRecordRisk)
             assert 0 <= risk.risk_score <= 10
             assert 0 <= risk.confidence <= 3
@@ -133,7 +133,7 @@ class TestReportRiskNode:
 
     def test_no_store_does_not_raise(self, agent_deps):
         report_risk = make_report_risk_node(world_engine=agent_deps.world_engine, store=None)
-        state = _make_state(risk_assessments=[])
+        state = _make_state(escalations=[])
         result = report_risk(state)
         assert result["status"] == StatusValue.COMPLETED
 
@@ -149,19 +149,19 @@ class TestReportRiskNode:
         )
         state = _make_state(
             cluster_id="cluster-north",
-            risk_assessments=[assessment],
+            escalations=[assessment],
         )
         report_risk(state)
-        items = store.search(("risk_assessments", "cluster-north"))
+        items = store.search(("escalations", "cluster-north"))
         assert len(items) == 1
         assert items[0].value["risk_score"] == 7
 
     def test_empty_assessments_writes_nothing_to_store(self, agent_deps):
         store = InMemoryStore()
         report_risk = make_report_risk_node(world_engine=agent_deps.world_engine, store=store)
-        state = _make_state(cluster_id="cluster-north", risk_assessments=[])
+        state = _make_state(cluster_id="cluster-north", escalations=[])
         report_risk(state)
-        items = store.search(("risk_assessments", "cluster-north"))
+        items = store.search(("escalations", "cluster-north"))
         assert len(items) == 0
 
     def test_multiple_assessments_stored_by_position(self, agent_deps):
@@ -177,9 +177,9 @@ class TestReportRiskNode:
             )
             for r, c in [(0, 0), (1, 1), (2, 2)]
         ]
-        state = _make_state(cluster_id="cluster-north", risk_assessments=assessments)
+        state = _make_state(cluster_id="cluster-north", escalations=assessments)
         report_risk(state)
-        items = store.search(("risk_assessments", "cluster-north"))
+        items = store.search(("escalations", "cluster-north"))
         assert len(items) == 3
 
 
@@ -195,7 +195,7 @@ class TestUpdateWorldReadsGrid:
         # Sentinel the grid with a value no default or metric would produce.
         engine.grid.get_cell(1, 2).cell_state.temperature_c = 99.0
 
-        update_world = make_update_world_state(world_engine=engine)
+        update_world = make_apply_thresholds(world_engine=engine)
         state = ClusterAgentState(
             cluster_id="cluster-north",
             workflow_id="t-6c",
@@ -229,7 +229,7 @@ class TestClusterAgentGraph:
         assert "evaluate" in node_names
         assert "report_risk" in node_names
 
-    async def test_invoke_with_readings_produces_risk_assessments(self, agent_deps):
+    async def test_invoke_with_readings_produces_escalations(self, agent_deps):
         graph = build_cluster_agent_graph(agent_deps=agent_deps)
         state = ClusterAgentState(
             cluster_id="cluster-north",
@@ -247,4 +247,4 @@ class TestClusterAgentGraph:
         )
         result = await graph.ainvoke(state)
         assert result["status"] == StatusValue.COMPLETED
-        assert result["risk_assessments"] == []
+        assert result["escalations"] == []

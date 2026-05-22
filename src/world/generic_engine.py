@@ -45,6 +45,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Generic
 
+from pydantic import BaseModel
+
 from world.cell_state import C
 from world.environment import EnvironmentState
 from world.generic_grid import GenericTerrainGrid
@@ -55,6 +57,13 @@ logger = logging.getLogger(__name__)
 
 
 # ── Ground truth snapshot ────────────────────────────────────────────────────
+class ShallowCell(BaseModel):
+    row: int
+    col: int
+    layer: int
+    attributes: dict
+    terrain: str
+    fuel_moisture: float
 
 
 @dataclass
@@ -167,7 +176,55 @@ class GenericWorldEngine(Generic[C]):
         return getattr(self.physics, "cell_size_ft", 200.0)
 
     def get_cell(self, row: int, col: int, layer: int = 0):
-        return self.grid.get_cell(row, col, layer)
+        try:
+            return self.grid.get_cell(row, col, layer)
+        except Exception as e:
+            return  None
+
+
+    def get_sector(self, cells: list[tuple[int, int]]):
+        sector = [
+            cell
+            for row, col in cells
+            if (cell:=self.get_cell(row, col, 0))
+        ]
+        return sector
+
+    def expand_sectors(
+        self,
+        centers: list[tuple[int, int]],
+        radius: int = 1,
+    ) -> list[list[tuple[int, int]]]:
+        """Expand changed-cell coordinates into merged, in-bounds sectors.
+
+        Each center grows into a (2*radius+1) square halo clamped to the grid.
+        Halos that share any cell are merged into one connected region, so no
+        cell is ever evaluated twice. Returns one sorted, deduped coordinate
+        list per region (coordinates only — callers resolve them via get_sector).
+        """
+        halos: list[set[tuple[int, int]]] = []
+        for center_row, center_col in centers:
+            halo = {
+                (row, col)
+                for row in range(center_row - radius, center_row + radius + 1)
+                for col in range(center_col - radius, center_col + radius + 1)
+                if 0 <= row < self.rows and 0 <= col < self.cols
+            }
+            if halo:
+                halos.append(halo)
+
+        merged: list[set[tuple[int, int]]] = []
+        for halo in halos:
+            overlapping = [region for region in merged if region & halo]
+            for region in overlapping:
+                merged.remove(region)
+                halo |= region
+            merged.append(halo)
+
+        return [sorted(region) for region in merged]
+
+    def get_bounding(self):
+        return self.rows, self.cols
 
     def tick(self) -> GenericGroundTruthSnapshot:
         """
@@ -262,6 +319,8 @@ class GenericWorldEngine(Generic[C]):
         if 0 <= tick < len(self.history):
             return self.history[tick]
         return None
+
+
 
     def inject_state(self, row: int, col: int, state: C, layer: int = 0) -> None:
         """

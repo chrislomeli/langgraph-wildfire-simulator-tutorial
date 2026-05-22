@@ -31,7 +31,6 @@ Design principles
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 
@@ -42,13 +41,11 @@ from agents.cluster.state import ClusterAgentState
 from agents.commons.node_executor import node_executor
 from agents.commons.routing import route_base
 from agents.commons.schemas import (
-    CellReadings,
-    CellRiskAssessment,
-    CollatedRecordRisk,
     Colors,
-    GridPosition,
+    Escalation, EvaluationCell
 )
 from agents.commons.state_types import StatusValue
+from controllers.schemas import UpdatedCell
 from llm.llm_registry import LLMRegistry
 from prompts import PromptRegistry
 from world import GenericWorldEngine
@@ -61,7 +58,7 @@ logger = logging.getLogger(__name__)
 # True for the dashboard milestone: evaluate returns stub CollatedRecordRisk
 # records without calling an LLM. Flip to False in the next milestone once
 # the prompt template and LLM tooling are ready.
-STUB_RISK_SCORE = False
+STUB_RISK_SCORE = True
 
 # ── Heuristic gate ────────────────────────────────────────────────────────────
 #
@@ -74,33 +71,29 @@ HEURISTIC_EVALUATE_THRESHOLD = 3
 
 
 # ── Node: update world ────────────────────────────────────────────────────────
-def make_update_world_state(
-    world_engine: GenericWorldEngine,
+def make_apply_thresholds(
+        world_engine: GenericWorldEngine,
 ):
-    """Factory for the update_world node.
+    """Factory for the apply_thresholds LangGraph node.
 
-    Metric values are written onto the world grid upstream by
-    ``CellStateManager.update()``. This node only *reads* that ground
-    truth for each cell named in ``state.readings`` (by cell position):
+    For each cell in ``state.updated_cells``, recomputes a fire-risk
+    heuristic from the current grid state. If any cell meets or exceeds
+    ``HEURISTIC_EVALUATE_THRESHOLD``, the node forwards the matching
+    ``SelectedCell`` objects to the evaluate node for LLM assessment.
 
-      1. Recompute the cell's risk heuristic from current grid values.
-      2. Snapshot the cell to a dict (post-write ground truth).
-
-    The list of cell dicts is what the evaluate node hands to the LLM.
+    Returns COMPLETED immediately if no cell crosses the threshold, or
+    if none of the qualifying cells can be resolved on the world grid.
     """
 
-    @node_executor("update_world")
-    def update_world(state: ClusterAgentState):
-        readings: list[CellReadings] = state.readings
-        grid = world_engine.grid
+    @node_executor("apply_thresholds")  # was "update_world" - name should match the function
+    def apply_thresholds(state: ClusterAgentState):
+        readings: list[UpdatedCell] = state.updated_cells
 
-        affected_cells: dict = {}
-        for cr in readings:
-            row, col = cr.position.row, cr.position.col
-            if (row, col) in affected_cells:
-                continue
+        # get_sector drops halo coords that fall outside the grid (edge sectors).
+        cells = world_engine.get_sector([(r.row, r.col) for r in readings])
 
-            cell = grid.get_cell(row, col)
+        status = StatusValue.COMPLETED
+        for cell in cells:
             f: FireCellState = cell.cell_state
             factors = [
                 f.temperature_c > 32,
@@ -108,27 +101,41 @@ def make_update_world_state(
                 f.vegetation < 0.50,
                 f.wind_speed_mps > 20,
             ]
-            cell.heuristic = round(sum(factors) / len(factors) * 10)
+            heuristic = round(sum(factors) / len(factors) * 10)
+            if heuristic >= HEURISTIC_EVALUATE_THRESHOLD:
+                status = StatusValue.PROCESSING
+                break
 
-            cell_dict = cell.to_dict()
-            cell_dict["heuristic_score"] = cell.heuristic
-            affected_cells[(row, col)] = cell_dict
+        if status == StatusValue.PROCESSING:
+            selected_cells = [
+                EvaluationCell(
+                    row=cell.row,
+                    col=cell.col,
+                    layer=cell.layer,
+                    state=cell.cell_state,
+                    attributes=cell.attributes,
+                )
+                for cell in cells
+            ]
+            if selected_cells:
+                return {
+                    "selected_cells": selected_cells,
+                    "status": status,
+                }
 
-        return {
-            "updated_cells": list(affected_cells.values()),
-            "status": StatusValue.PROCESSING,
-        }
+        # No cell crossed the threshold, or the sector resolved to no cells.
+        return {"status": StatusValue.COMPLETED}
 
-    return update_world
+    return apply_thresholds
 
 
 # ── Node: evaluate ────────────────────────────────────────────────────────────
 
 
 def make_evaluate_node(
-    prompt_registry: PromptRegistry,
-    llm_registry: LLMRegistry,
-    world_engine: GenericWorldEngine,
+        prompt_registry: PromptRegistry,
+        llm_registry: LLMRegistry,
+        world_engine: GenericWorldEngine,
 ):
     """Factory that creates the evaluate node.
 
@@ -165,11 +172,11 @@ def make_evaluate_node(
         State reads
         ───────────
           - state.updated_cells : cell snapshot dicts from update_world
-          - state.cluster_id   : for logging and LLM context
+          - state.sector_id   : for logging and LLM context
 
         State writes
         ────────────
-          - risk_assessments : list[CollatedRecordRisk], one per cell
+          - escalations : list[CollatedRecordRisk], one per cell
           - status           : PROCESSING
 
         Side effects
@@ -178,116 +185,61 @@ def make_evaluate_node(
           evaluated cell on the world grid.
 
         """
-        cells = state.updated_cells
-        cluster_id: str = state.cluster_id
+        evaluate_cells: list[EvaluationCell] = state.selected_cells
+        max_rows, max_columns = world_engine.get_bounding()
 
-        if not cells:
-            logger.warning("ClusterAgent[%s] evaluate: no cells to evaluate", cluster_id)
+        if not evaluate_cells:
+            logger.warning("ClusterAgent evaluate: no cells to evaluate")
             return {
-                "risk_assessments": [],
+                "escalation": None,
                 "status": StatusValue.PROCESSING,
             }
+
+        system_prompt = prompt_registry.render(
+            "evaluate",
+            context=dict(
+                sector_id=state.sector_id,
+                max_rows=max_rows,
+                max_columns=max_columns)
+        )
+        human_prompt = json.dumps([c.model_dump() for c in evaluate_cells], indent=2)
 
         # Split on heuristic score — only call the LLM for cells that have at
         # least one risk factor present. Cells below the threshold are assigned
         # risk_score=0 with high confidence: the heuristic says nothing is there.
-        evaluate_cells = [
-            c for c in cells if c.get("heuristic_score", 0) >= HEURISTIC_EVALUATE_THRESHOLD
-        ]
-        skip_cells = [
-            c for c in cells if c.get("heuristic_score", 0) < HEURISTIC_EVALUATE_THRESHOLD
-        ]
-
-        if skip_cells:
-            logger.info(
-                "ClusterAgent[%s] heuristic gate: skipping %d/%d cells (score < %d)",
-                cluster_id,
-                len(skip_cells),
-                len(cells),
-                HEURISTIC_EVALUATE_THRESHOLD,
-            )
-
-        skipped_risks = [
-            CollatedRecordRisk(
-                position=GridPosition(row=c["row"], col=c["col"]),
-                risk_score=0,
-                confidence=3,
-                confidence_rationale="Heuristic gate: no risk factors present.",
-                contributing_factors=["heuristic_gate"],
-            )
-            for c in skip_cells
-        ]
-        if not evaluate_cells:
-            print(
-                f"""\n{Colors.YELLOW}● not CALLING LLM - no potential hotspots found {Colors.RESET}"""
-            )
-
         if STUB_RISK_SCORE:
-            print(f"""\n{Colors.BLUE}● CALLING LLM STUB {Colors.RESET}""")
-            llm_risks = [
-                CollatedRecordRisk(
-                    position=GridPosition(row=cell["row"], col=cell["col"]),
-                    risk_score=10,
+            print(f"""\n{Colors.YELLOW}● CALLING LLM STUB {Colors.RESET}""")
+            return {
+                "escalation": Escalation(
+                    sector_id=state.sector_id,
+                    escalate=False,
                     confidence=3,
-                    confidence_rationale="Stub score — LLM not active in this milestone.",
-                    contributing_factors=["stub"],
-                )
-                for cell in evaluate_cells
-            ]
+                    contributing_factors=["this is a dummy escalation"]
+                ),
+                "status": StatusValue.PROCESSING,
+            }
+
         else:
+            print(f"""\n{Colors.BLUE}● CALLING LLM  {Colors.RESET}""")
             llm = llm_registry.get("classifier")
-            system_prompt = prompt_registry.render(
-                "evaluate",
-                {"cluster_id": cluster_id},
+            result = await llm.with_structured_output(Escalation).ainvoke(
+                [
+                    SystemMessage(system_prompt),
+                    HumanMessage(human_prompt),
+                ]
             )
-
-            sem = asyncio.Semaphore(max_concurrency)
-
-            async def assess_risk(cell: dict) -> CollatedRecordRisk | BaseException:
-                print(f"""\n{Colors.BLUE}● CALLING LLM  {Colors.RESET}""")
-                human_prompt = json.dumps(cell, default=str, indent=2)
-                async with sem:
-                    return await llm.with_structured_output(CollatedRecordRisk).ainvoke(
-                        [
-                            SystemMessage(system_prompt),
-                            HumanMessage(human_prompt),
-                        ]
-                    )
-
-            results = await asyncio.gather(
-                *(assess_risk(c) for c in evaluate_cells),
-                return_exceptions=True,
-            )
-            llm_risks = []
-            for cell, result in zip(evaluate_cells, results):
-                if isinstance(result, BaseException):
-                    logger.error(
-                        "ClusterAgent[%s] assess_risk failed for cell (%s,%s): %s",
-                        cluster_id,
-                        cell["row"],
-                        cell["col"],
-                        result,
-                    )
-                else:
-                    print(f"""\n{Colors.TEAL}{result.model_dump_json(indent=2)}{Colors.RESET}""")
-                    llm_risks.append(result)
-
-        risks = skipped_risks + llm_risks
-
-        # Write risk back onto the cell so sector_analysis can find hotspots.
-        grid = world_engine.grid
-        for risk in risks:
-            cell = grid.get_cell(risk.position.row, risk.position.col)
-            cell.risk_assessment = CellRiskAssessment(
-                risk_score=risk.risk_score,
-                confidence=risk.confidence,
-                confidence_rationale=risk.confidence_rationale,
-            )
-
-        return {
-            "risk_assessments": risks,
-            "status": StatusValue.PROCESSING,
-        }
+            if result.escalate is True:
+                print(f"""\nPROMOTE:: {Colors.TEAL}{result.model_dump_json(indent=2)}{Colors.RESET}""")
+                return {
+                    "escalation": result,
+                    "status": StatusValue.PROCESSING,
+                }
+            else:
+                print(f"""\n{Colors.YELLOW} DEFER:: {result.model_dump_json(indent=2)}{Colors.RESET}""")
+                return {
+                    "escalation": result,
+                    "status": StatusValue.PROCESSING,
+                }
 
     return evaluate
 
@@ -302,7 +254,7 @@ def make_report_risk_node(world_engine: GenericWorldEngine, store: BaseStore | N
     ──────────
     store : BaseStore or None
         Optional LangGraph store. When provided, each CollatedRecordRisk is
-        written under (``"risk_assessments"``, cluster_id) keyed by
+        written under (``"escalations"``, sector_id) keyed by
         ``"{row}_{col}"`` for retrieval by the supervisor or a dashboard.
     """
 
@@ -312,52 +264,53 @@ def make_report_risk_node(world_engine: GenericWorldEngine, store: BaseStore | N
 
         State reads
         ───────────
-          - state.risk_assessments : what to report
-          - state.cluster_id      : for store namespace
+          - state.escalations : what to report
+          - state.sector_id      : for store namespace
 
         State writes
         ────────────
           - status : COMPLETED
         """
-        assessments = state.risk_assessments
-        cluster_id = state.cluster_id
-        grid = world_engine.grid
-
-        for assessment in assessments:
-            cell = grid.get_cell(assessment.position.row, assessment.position.col)
-            heuristic = getattr(cell, "heuristic", None)
-            if heuristic is not None:
-                divergence = abs(assessment.risk_score - heuristic)
-                if divergence > 4:
-                    logger.warning(
-                        "ClusterAgent[%s] heuristic divergence at (%s,%s): llm=%s heuristic=%s delta=%s",
-                        cluster_id,
-                        assessment.position.row,
-                        assessment.position.col,
-                        assessment.risk_score,
-                        heuristic,
-                        divergence,
-                    )
-
-        if store is not None and assessments:
-            for assessment in assessments:
-                key = f"{assessment.position.row}_{assessment.position.col}"
-                store.put(
-                    ("risk_assessments", cluster_id),
-                    key,
-                    assessment.model_dump(mode="json"),
-                )
-            logger.info(
-                "ClusterAgent[%s] wrote %d risk assessment(s) to store",
-                cluster_id,
-                len(assessments),
-            )
-        else:
-            logger.info(
-                "ClusterAgent[%s] completed with %d risk assessment(s)",
-                cluster_id,
-                len(assessments) if assessments else 0,
-            )
+        escalation = state.escalation
+        # assessments = state.escalated_cells
+        # sector_id = state.sector_id
+        # grid = world_engine.grid
+        #
+        # for assessment in assessments:
+        #     cell = grid.get_cell(assessment.position.row, assessment.position.col)
+        #     heuristic = getattr(cell, "heuristic", None)
+        #     if heuristic is not None:
+        #         divergence = abs(assessment.risk_score - heuristic)
+        #         if divergence > 4:
+        #             logger.warning(
+        #                 "ClusterAgent[%s] heuristic divergence at (%s,%s): llm=%s heuristic=%s delta=%s",
+        #                 sector_id,
+        #                 assessment.position.row,
+        #                 assessment.position.col,
+        #                 assessment.risk_score,
+        #                 heuristic,
+        #                 divergence,
+        #             )
+        #
+        # if store is not None and assessments:
+        #     for assessment in assessments:
+        #         key = f"{assessment.position.row}_{assessment.position.col}"
+        #         store.put(
+        #             ("escalations", sector_id),
+        #             key,
+        #             assessment.model_dump(mode="json"),
+        #         )
+        #     logger.info(
+        #         "ClusterAgent[%s] wrote %d risk assessment(s) to store",
+        #         sector_id,
+        #         len(assessments),
+        #     )
+        # else:
+        #     logger.info(
+        #         "ClusterAgent[%s] completed with %d risk assessment(s)",
+        #         sector_id,
+        #         len(assessments) if assessments else 0,
+        #     )
 
         return {"status": StatusValue.COMPLETED}
 
@@ -365,6 +318,15 @@ def make_report_risk_node(world_engine: GenericWorldEngine, store: BaseStore | N
 
 
 # ── Routers ──────────────────────────────────────────────────────────────────
+def route_after_filter(state: ClusterAgentState) -> str:
+    """Conditional edge router after evaluate node.
+
+    Delegates to route_base:
+      - status == ERROR     → END
+      - status == COMPLETED → END
+      - otherwise           → "report_risk"
+    """
+    return route_base(state, next_node="evaluate")
 
 
 def route_after_evaluate(state: ClusterAgentState) -> str:

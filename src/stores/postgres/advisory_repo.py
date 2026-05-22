@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from agents.commons.schemas import ResourceAdvisoryRecord
 from stores.base import AdvisoryRepository as AdvisoryRepositoryBase
 from stores.postgres.gateway import PgGateway
+from stores.schemas import ResourceAdvisoryRecord
 
 logger = logging.getLogger(__name__)
 

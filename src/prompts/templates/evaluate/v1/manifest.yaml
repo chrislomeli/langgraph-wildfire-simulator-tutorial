@@ -1,4 +1,7 @@
 description: "Cluster agent evaluate prompt — wildfire anomaly detection"
 required_vars:
-  - cluster_id
+  - sector_id
+  - max_rows
+  - max_columns
+
 

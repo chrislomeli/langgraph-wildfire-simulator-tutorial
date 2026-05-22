@@ -13,7 +13,7 @@ Quick reference:
   - TracedState        → base state class with session_id, status, error
   - GridPosition       → (row, col) coordinate
   - Metric             → sensor reading with signal strength
-  - CellReadings       → triggered cell envelope (cluster_id + position + metrics)
+  - CellReadings       → triggered cell envelope (sector_id + position + metrics)
   - CollatedRecordRisk → risk assessment for a single cell
   - RiskAssessment     → container for all risk assessments
   - LatLon             → real-world coordinate
