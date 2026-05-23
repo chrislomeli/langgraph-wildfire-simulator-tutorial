@@ -9,6 +9,7 @@ from stores.base import TerrainRepository as TerrainRepositoryBase
 from stores.postgres.gateway import PgGateway
 from stores.schemas import Terrain
 from world.domains.wildfire.cell_state import FireCellState, TerrainType
+from world.grid import TerrainCode
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ class TerrainRepository(TerrainRepositoryBase):
                t.grid_row,
                t.layer,
                t.cell_key,
-               t.terrain_type,
+               t.terrain_code,
                t.terrain,
                t.vegetation,
                t.slope,
@@ -71,7 +72,8 @@ class TerrainRepository(TerrainRepositoryBase):
                c.wind_speed_mps,
                c.wind_direction_deg,
                c.pressure_hpa,
-               c.vegetation
+               c.vegetation,
+              c.precipitation
         from terrain t
                  join cell_state c
                       on t.grid_column = c.grid_column and t.grid_row = c.grid_row and t.layer = c.layer and t.region = c.region
@@ -130,8 +132,11 @@ class TerrainRepository(TerrainRepositoryBase):
         """
         terrain_type = _TERRAIN_MAP.get(terrain.terrain or "FOREST", TerrainType.FOREST)
 
+
         return FireCellState(
             terrain_type=terrain_type,
+            terrain_code=TerrainCode(terrain.terrain_code),
+            precipitation=terrain.precipitation,
             vegetation=terrain.vegetation if terrain.vegetation is not None else 0.8,
             fuel_moisture=terrain.fuel_moisture if terrain.fuel_moisture is not None else 0.3,
             slope=terrain.slope if terrain.slope is not None else 0.0,

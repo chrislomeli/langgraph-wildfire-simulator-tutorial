@@ -33,19 +33,17 @@ Node responsibilities
 
 from __future__ import annotations
 
+import operator
 import uuid
-from http.client import LineTooLong
-from typing import Annotated, NewType, Any
+from typing import Annotated, NewType
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import Field, BaseModel
+from pydantic import Field
 
-from agents.commons.schemas import CellReadings, CollatedRecordRisk, TracedState, Escalation, EvaluationCell
-from controllers.schemas import AdvisoryRequest, UpdatedCell
-from world import GenericCell
-from world.domains.wildfire import FireCellState
+from agents.commons.schemas import CellReadings, TracedState, Escalation, EvaluationCell
+from controllers.schemas import UpdatedCell
 
 # ── Typed graph ────────────────────────────────────────────────────
 StreamingRiskGraph = NewType("StreamingRiskGraph", CompiledStateGraph)
@@ -65,26 +63,23 @@ class ClusterAgentState(TracedState):
 
     # ── Identity ──────────────────────────────────────────────────────
     sector_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    workflow_id: str
+    anchor_row: int
+    anchor_column: int
+    anchor_layer: int = Field(default=0)
 
-    # ── LLM tool loop ─────────────────────────────────────────────────
+    # ── Messages ─────────────────────────────────────────────────
     # add_messages reducer appends new messages rather than overwriting.
     # evaluate node reads and writes here via the ToolNode loop.
     messages: Annotated[list[BaseMessage], add_messages] = Field(default_factory=list)
 
-    anchor_row: int
-    anchor_column: int
-    updated_cells: list[UpdatedCell] = Field(default_factory=list)
-    selected_cells: list[EvaluationCell] = Field(default_factory=list)
+    # ── Payloads ─────────────────────────────────────────────────
+    updated_cell: UpdatedCell | None = Field(default=None)
+    selected_cell: EvaluationCell | None = Field(default=None)
+    heuristic_score: int | None = Field(default=None)
     escalation: Escalation | None  = Field(default=None)
+    briefing: Annotated[dict, operator.or_] = Field(default_factory=dict)
+    scenario: Annotated[dict, operator.or_] = Field(default_factory=dict)
 
-    # ── Risk pipeline fields ──────────────────────────────────────────
-    # Supervisor pre-populates ``readings`` before invoking the subgraph.
-    # update_world reads ``readings``, writes metric values onto the world
-    # grid, and emits ``updated_cells`` (list of cell snapshot dicts).
-    # evaluate reads ``updated_cells`` and writes ``escalations``.
-    # report_risk reads ``escalations`` and persists them.
-
-
-
+    # ── Legacy ─────────────────────────────────────────────────
+    workflow_id: str
     readings: list[CellReadings] = Field(default_factory=list)

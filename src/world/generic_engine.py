@@ -42,6 +42,8 @@ This is essential for comparing agent configurations and regression testing.
 from __future__ import annotations
 
 import logging
+import math
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Generic
 
@@ -227,6 +229,251 @@ class GenericWorldEngine(Generic[C]):
 
     def get_bounding(self):
         return self.rows, self.cols
+
+    # ── Spread-risk summary ───────────────────────────────────────────────────
+
+    @staticmethod
+    def degrees_to_compass(degrees: float) -> str:
+        """Convert a 0–360 degree bearing to the nearest 8-point compass label."""
+        labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        return labels[round(degrees / 45) % 8]
+
+    @staticmethod
+    def _bearing(dr: int, dc: int) -> float:
+        """Compass bearing in degrees from anchor to neighbor (N=0, clockwise)."""
+        angle = math.degrees(math.atan2(dc, -dr))
+        return (angle + 360) % 360
+
+    @staticmethod
+    def _octant(dr: int, dc: int) -> str:
+        octants = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        bearing = GenericWorldEngine._bearing(dr, dc)
+        return octants[round(bearing / 45) % 8]
+
+    @staticmethod
+    def _wind_alignment(bearing_deg: float, wind_direction_deg: float) -> float:
+        """1.0 = fully downwind, 0.0 = fully upwind."""
+        wind_to = (wind_direction_deg + 180) % 360
+        diff = abs(bearing_deg - wind_to) % 360
+        diff = min(diff, 360 - diff)
+        return (math.cos(math.radians(diff)) + 1) / 2
+
+    @staticmethod
+    def _cell_spread_risk(state, bearing_deg: float) -> float:
+        """
+        Single-cell ignition risk score (0.0–1.0) for an UNBURNED neighbour.
+
+        Combines fuel load, moisture, slope, and wind alignment.
+        Returns 0.0 for BURNING or BURNED cells — they are not ignition candidates.
+        Requires a FireCellState; returns 0.0 for any other cell type.
+        """
+        from world.domains.wildfire import FireCellState
+        from world.grid import FireState
+
+        if not isinstance(state, FireCellState):
+            return 0.0
+        if state.fire_state != FireState.UNBURNED:
+            return 0.0
+        veg = max(0.0, min(1.0, state.vegetation))
+        moisture = max(0.0, min(1.0, state.fuel_moisture))
+        base = veg * (1 - moisture)
+        slope_factor = max(0.1, 1 + (0.1 * state.slope))
+        wind = GenericWorldEngine._wind_alignment(bearing_deg, state.wind_direction_deg)
+        return round(base * slope_factor * wind, 3)
+
+    def get_spread_risk_summary(self, anchor_row: int, anchor_col: int, radius: int = 5) -> dict:
+        """
+        Summarise fire-spread risk in each compass direction around an anchor cell.
+
+        Returns a dict keyed by direction (N, NE, E, SE, S, SW, W, NW).
+        Each entry: {"cell_count": int, "avg_risk": float, "max_risk": float}
+
+        Risk is derived from vegetation, fuel moisture, slope, and wind alignment.
+        Only UNBURNED neighbours contribute; BURNING/BURNED cells score 0.0 because
+        the question is where fire might START next, not where it already is.
+        Intended as prompt context — include in the agent briefing, not as a tool call.
+        """
+        buckets: dict[str, list[float]] = defaultdict(list)
+
+        for r in range(anchor_row - radius, anchor_row + radius + 1):
+            for c in range(anchor_col - radius, anchor_col + radius + 1):
+                if r == anchor_row and c == anchor_col:
+                    continue
+                cell = self.get_cell(r, c, 0)
+                if cell is None:
+                    continue
+                dr, dc = r - anchor_row, c - anchor_col
+                bearing = self._bearing(dr, dc)
+                direction = self._octant(dr, dc)
+                risk = self._cell_spread_risk(cell.cell_state, bearing)
+                buckets[direction].append(risk)
+
+        anchor = self.get_cell(anchor_row, anchor_col, 0)
+        wind_deg = getattr(anchor.cell_state, "wind_direction_deg", 0.0) if anchor else 0.0
+        wind_speed = getattr(anchor.cell_state, "wind_speed_mps", 0.0) if anchor else 0.0
+        summary: dict = {
+            "wind_from_degrees": wind_deg,
+            "wind_from_compass": self.degrees_to_compass(wind_deg),
+            "wind_speed_mps": wind_speed,
+        }
+
+        directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        for direction in directions:
+            risks = buckets.get(direction, [])
+            if not risks:
+                summary[direction] = {"cell_count": 0, "avg_risk": 0.0, "max_risk": 0.0, "risk_level": "MINIMAL"}
+            else:
+                avg = round(sum(risks) / len(risks), 3)
+                mx = round(max(risks), 3)
+                avg_label = self._risk_label(avg)
+                max_label = self._risk_label(mx)
+                risk_level = avg_label if avg_label == max_label else f"{avg_label}-{max_label}"
+                summary[direction] = {
+                    "cell_count": len(risks),
+                    "avg_risk": avg, "max_risk": mx, "risk_level": risk_level,
+                }
+        return summary
+
+    @staticmethod
+    def _risk_label(score: float) -> str:
+        if score >= 0.7:  return "HIGH"
+        if score >= 0.4:  return "MEDIUM"
+        if score >= 0.1:  return "LOW"
+        return "MINIMAL"
+
+    # ── Forecast ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _interpolate_segment(segment, tick: int, baseline: float) -> float:
+        start_val = segment.start_value if segment.start_value is not None else baseline
+        if tick <= segment.start_tick:
+            return start_val
+        elapsed = tick - segment.start_tick
+        if elapsed >= segment.duration_ticks:
+            return segment.target_value if segment.hold_after else start_val
+        return start_val + (segment.target_value - start_val) * (elapsed / segment.duration_ticks)
+
+    @staticmethod
+    def _resolve_metric(metric: str, tick: int, plan: list, baseline: float) -> float:
+        segments = [s for s in plan if s.metric == metric]
+        if not segments:
+            return baseline
+        # use the latest segment whose start_tick <= tick
+        applicable = [s for s in segments if tick >= s.start_tick]
+        if not applicable:
+            return baseline
+        seg = max(applicable, key=lambda s: s.start_tick)
+        return GenericWorldEngine._interpolate_segment(seg, tick, baseline)
+
+    def calculate_forecast(self, fire_cell, plan: list, starting_tick: int = 0, periods: int = 10) -> dict:
+        """
+        Build a NWS-style weather forecast by applying scripted plan segments to a cell baseline.
+
+        Each period represents one simulation tick (one day). Values for metrics
+        covered by a ScenarioPlanSegment are linearly interpolated from the segment;
+        everything else holds at the fire_cell baseline.
+
+        wind_speed_mps is converted to mph. wind_direction_deg is converted to a
+        compass label. precipitation (0–1) is expressed as a 0–100 percent.
+        """
+        from datetime import date, timedelta
+        today = date.today()
+
+        forecast_periods = []
+        for i in range(periods):
+            tick = starting_tick + i
+            day = today + timedelta(days=i)
+
+            temp = self._resolve_metric("temperature_c", tick, plan, fire_cell.temperature_c)
+            precip = self._resolve_metric("precipitation", tick, plan, fire_cell.precipitation)
+            wind_speed = self._resolve_metric("wind_speed_mps", tick, plan, fire_cell.wind_speed_mps)
+            wind_dir = self._resolve_metric("wind_direction_deg", tick, plan, fire_cell.wind_direction_deg)
+            humidity = self._resolve_metric("humidity_pct", tick, plan, fire_cell.humidity_pct)
+            fuel_moisture = self._resolve_metric("fuel_moisture", tick, plan, fire_cell.fuel_moisture)
+
+            forecast_periods.append({
+                "number": i + 1,
+                "date": day.isoformat(),
+                "temperature": round(temp, 1),
+                "temperatureUnit": "C",
+                "probabilityOfPrecipitation": {
+                    "unitCode": "wmoUnit:percent",
+                    "value": round(precip * 100, 1),
+                },
+                "windSpeed": f"{round(wind_speed * 2.237)} mph",
+                "windDirection": self.degrees_to_compass(wind_dir),
+                "humidity_pct": round(humidity, 1),
+                "fuel_moisture": round(fuel_moisture, 3),
+            })
+
+        return {
+            "units": "us",
+            "forecastGenerator": "BaselineForecastGenerator",
+            "generatedAt": date.today().isoformat(),
+            "periods": forecast_periods,
+        }
+
+    def calculate_history(self, fire_cell, plan: list) -> dict:
+        """
+        Build a NWS-style history from tick 0 to current_tick using the same
+        plan interpolation as calculate_forecast, run in reverse.
+
+        Tick 0 maps to (today - current_tick days); current_tick maps to today.
+        Returns an empty periods list when current_tick is 0 (no history yet).
+        """
+        from datetime import date, timedelta
+        today = date.today()
+
+        history_periods = []
+        for tick in range(self.current_tick + 1):
+            day = today - timedelta(days=self.current_tick - tick)
+
+            temp = self._resolve_metric("temperature_c", tick, plan, fire_cell.temperature_c)
+            precip = self._resolve_metric("precipitation", tick, plan, fire_cell.precipitation)
+            wind_speed = self._resolve_metric("wind_speed_mps", tick, plan, fire_cell.wind_speed_mps)
+            wind_dir = self._resolve_metric("wind_direction_deg", tick, plan, fire_cell.wind_direction_deg)
+            humidity = self._resolve_metric("humidity_pct", tick, plan, fire_cell.humidity_pct)
+            fuel_moisture = self._resolve_metric("fuel_moisture", tick, plan, fire_cell.fuel_moisture)
+            rain = f"{precip * .15} inches  per hour " if precip > .5 else "no rain"
+
+            history_periods.append({
+                "number": tick + 1,
+                "date": day.isoformat(),
+                "temperature": round(temp, 1),
+                "temperatureUnit": "C",
+                "precipitation": rain,
+                "windSpeed": f"{round(wind_speed * 2.237)} mph",
+                "windDirection": self.degrees_to_compass(wind_dir),
+                "humidity_pct": round(humidity, 1),
+                "fuel_moisture": round(fuel_moisture, 3),
+            })
+
+        return {
+            "units": "us",
+            "forecastGenerator": "BaselineForecastGenerator",
+            "generatedAt": today.isoformat(),
+            "periods": history_periods,
+        }
+
+    def create_forecast(self, row: int, col: int) -> dict:
+        fire_cell = self.physics.initial_cell_state(row, col)
+        plan = self.physics.get_plan(row, col)
+        return self.calculate_forecast(fire_cell=fire_cell, plan=plan, starting_tick=self.current_tick)
+
+    def create_history(self, row: int, col: int) -> dict:
+        fire_cell = self.physics.initial_cell_state(row, col)
+        plan = self.physics.get_plan(row, col)
+        return self.calculate_history(fire_cell=fire_cell, plan=plan)
+
+    def create_briefing(self, row: int, col: int) -> dict:
+        fire_cell = self.physics.initial_cell_state(row, col)
+        plan = self.physics.get_plan(row, col)
+        return {
+            "history": self.calculate_history(fire_cell=fire_cell, plan=plan),
+            "forecast": self.calculate_forecast(fire_cell=fire_cell, plan=plan, starting_tick=self.current_tick),
+        }
+
+
 
     def tick(self) -> GenericGroundTruthSnapshot:
         """

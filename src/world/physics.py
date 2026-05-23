@@ -118,6 +118,19 @@ class PhysicsModule(ABC, Generic[C]):
         ...
 
     @abstractmethod
+    def get_plan(self, row: int, col: int, layer: int = 0) -> Any:
+        """
+        Return the default cell state for a new cell at (row, col, layer).
+
+        Called by GenericTerrainGrid during construction to initialise
+        every cell.  The coordinates are provided in case the initial
+        state depends on position (e.g. elevation from a terrain map,
+        or different state per layer).
+        """
+        ...
+
+
+    @abstractmethod
     def tick_physics(
         self,
         grid: GenericTerrainGrid[C],

@@ -42,7 +42,7 @@ from agents.commons.node_executor import node_executor
 from agents.commons.routing import route_base
 from agents.commons.schemas import (
     Colors,
-    Escalation, EvaluationCell
+    Escalation, EvaluationCell, Evaluation
 )
 from agents.commons.state_types import StatusValue
 from controllers.schemas import UpdatedCell
@@ -87,44 +87,42 @@ def make_apply_thresholds(
 
     @node_executor("apply_thresholds")  # was "update_world" - name should match the function
     def apply_thresholds(state: ClusterAgentState):
-        readings: list[UpdatedCell] = state.updated_cells
+        uc: UpdatedCell = state.updated_cell
 
-        # get_sector drops halo coords that fall outside the grid (edge sectors).
-        cells = world_engine.get_sector([(r.row, r.col) for r in readings])
+        updated_cell = world_engine.get_cell(uc.row, uc.col)
+        if not updated_cell:
+            logger.error(f"Coordinate cell {uc.model_dump_json()} does not exist ")
+            return {
+                "status": StatusValue.ERROR,
+            }
 
-        status = StatusValue.COMPLETED
-        for cell in cells:
-            f: FireCellState = cell.cell_state
-            factors = [
-                f.temperature_c > 32,
-                f.humidity_pct < 15,
-                f.vegetation < 0.50,
-                f.wind_speed_mps > 20,
-            ]
-            heuristic = round(sum(factors) / len(factors) * 10)
-            if heuristic >= HEURISTIC_EVALUATE_THRESHOLD:
-                status = StatusValue.PROCESSING
-                break
-
-        if status == StatusValue.PROCESSING:
-            selected_cells = [
-                EvaluationCell(
-                    row=cell.row,
-                    col=cell.col,
-                    layer=cell.layer,
-                    state=cell.cell_state,
-                    attributes=cell.attributes,
+        f: FireCellState = updated_cell.cell_state
+        factors = [
+            f.temperature_c > 32,
+            f.humidity_pct < 15,
+            f.vegetation < 0.50,
+            f.wind_speed_mps > 20,
+        ]
+        heuristic = round(sum(factors) / len(factors) * 10)
+        if heuristic >= HEURISTIC_EVALUATE_THRESHOLD:
+            selected_cell = EvaluationCell(
+                    row=updated_cell.row,
+                    col=updated_cell.col,
+                    layer=updated_cell.layer,
+                    state=updated_cell.cell_state,
+                    attributes=updated_cell.attributes,
                 )
-                for cell in cells
-            ]
-            if selected_cells:
-                return {
-                    "selected_cells": selected_cells,
-                    "status": status,
-                }
+            return {
+                "heuristic_score": round(sum(factors) / len(factors) * 10),
+                "selected_cell": selected_cell,
+                "status": StatusValue.PROCESSING,
+            }
+        else:
+            return {
+                "heuristic_score": round(sum(factors) / len(factors) * 10),
+                "status": StatusValue.COMPLETED,
+            }
 
-        # No cell crossed the threshold, or the sector resolved to no cells.
-        return {"status": StatusValue.COMPLETED}
 
     return apply_thresholds
 
@@ -185,63 +183,84 @@ def make_evaluate_node(
           evaluated cell on the world grid.
 
         """
-        evaluate_cells: list[EvaluationCell] = state.selected_cells
+        evaluate_cell: EvaluationCell = state.selected_cell
         max_rows, max_columns = world_engine.get_bounding()
+        row, col, layer = evaluate_cell.row, evaluate_cell.col, 0
 
-        if not evaluate_cells:
+        if not evaluate_cell:
             logger.warning("ClusterAgent evaluate: no cells to evaluate")
             return {
                 "escalation": None,
                 "status": StatusValue.PROCESSING,
             }
 
+        # provide a breakdown of conditions surrounding the changed cell
+        scenario = world_engine.get_spread_risk_summary(row, col)
+
+        # provide a weather forecast
+        briefing = world_engine.create_briefing(row, col)
+        forecast = briefing["forecast"]
+        history = briefing["history"]
+
         system_prompt = prompt_registry.render(
             "evaluate",
             context=dict(
                 sector_id=state.sector_id,
                 max_rows=max_rows,
-                max_columns=max_columns)
+                max_columns=max_columns,
+                scenario=json.dumps(scenario, indent=2),
+                history=json.dumps(history, indent=2),
+                forecast=json.dumps(forecast, indent=2),
+            )
         )
-        human_prompt = json.dumps([c.model_dump() for c in evaluate_cells], indent=2)
+        human_prompt = f"Readings for ANCHOR cell ({evaluate_cell.row},{evaluate_cell.col})"+evaluate_cell.model_dump_json(indent=2)
 
         # Split on heuristic score — only call the LLM for cells that have at
         # least one risk factor present. Cells below the threshold are assigned
         # risk_score=0 with high confidence: the heuristic says nothing is there.
         if STUB_RISK_SCORE:
             print(f"""\n{Colors.YELLOW}● CALLING LLM STUB {Colors.RESET}""")
-            return {
-                "escalation": Escalation(
-                    sector_id=state.sector_id,
-                    anchor_column=state.anchor_column,
-                    anchor_row=state.anchor_row,
+            evaluation =   Evaluation(
                     escalate=True,
+                    ignition_risk=5,
+                    spread_risk=1,
                     confidence=3,
-                    contributing_factors=["this is a dummy escalation"]
-                ),
-                "status": StatusValue.PROCESSING,
-            }
-
+                    reasoning=["this is a dummy escalation"]
+                )
         else:
             print(f"""\n{Colors.BLUE}● CALLING LLM  {Colors.RESET}""")
             llm = llm_registry.get("classifier")
-            result = await llm.with_structured_output(Escalation).ainvoke(
+            evaluation = await llm.with_structured_output(Evaluation).ainvoke(
                 [
                     SystemMessage(system_prompt),
                     HumanMessage(human_prompt),
                 ]
             )
-            if result.escalate is True:
-                print(f"""\nPROMOTE:: {Colors.TEAL}{result.model_dump_json(indent=2)}{Colors.RESET}""")
-                return {
-                    "escalation": result,
-                    "status": StatusValue.PROCESSING,
-                }
-            else:
-                print(f"""\n{Colors.YELLOW} DEFER:: {result.model_dump_json(indent=2)}{Colors.RESET}""")
-                return {
-                    "escalation": result,
-                    "status": StatusValue.PROCESSING,
-                }
+
+        escalation = Escalation(
+            row=evaluate_cell.row,
+            col=evaluate_cell.col,
+            layer=evaluate_cell.layer,
+            sector_id=state.sector_id,
+            **evaluation.model_dump()
+        )
+
+        if escalation.escalate:
+            print(f"""\nPROMOTE:: {Colors.TEAL}{escalation.model_dump_json(indent=2)}{Colors.RESET}""")
+            return {
+                "briefing": {(row,col,layer): briefing},
+                "scenario": {(row,col,layer): scenario},
+                "escalation": escalation,
+                "status": StatusValue.PROCESSING,
+            }
+        else:
+            print(f"""\n{Colors.YELLOW} DEFER:: {escalation.model_dump_json(indent=2)}{Colors.RESET}""")
+            return {
+                "briefing": {(row,col,layer): briefing},
+                "scenario": {(row,col,layer): scenario},
+                "escalation": escalation,
+                "status": StatusValue.PROCESSING,
+            }
 
     return evaluate
 

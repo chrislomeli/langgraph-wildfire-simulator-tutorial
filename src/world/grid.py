@@ -25,6 +25,16 @@ class TerrainType(StrEnum):
     URBAN = "URBAN"
     SNOW = "SNOW"
 
+class TerrainCode(StrEnum):
+    """
+    What kind of land a cell represents from fire models.
+    """
+    SH = "SH"
+    GR = "GR"
+    URB = "URB"
+    NB = "NB"
+    TL = "TL"
+
 
 class FireState(StrEnum):
     """

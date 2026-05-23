@@ -124,6 +124,8 @@ class SupervisorState(TracedState):
     # ── Input ────────────────────────────────────────────────────────
     updates: list[UpdatedCell] = Field(default_factory=list)
     escalations:  Annotated[list[Escalation], operator.add] = Field(default_factory=list)
+    briefings: Annotated[dict, operator.or_] = Field(default_factory=dict)
+    scenarios: Annotated[dict, operator.or_] = Field(default_factory=dict)
 
 
     # ── Input Legacy────────────────────────────────────────────────────────

@@ -107,6 +107,7 @@ class TerrainState(BaseModel):
     wind_direction_deg: float | None = None
     pressure_hpa: float | None = None
     vegetation: float | None = None
+    precipitation: float | None = None
 
 
 class Terrain(TerrainState):
@@ -115,7 +116,7 @@ class Terrain(TerrainState):
 
     cell_key: str | None = None
     terrain: str | None = None
-    terrain_type: str | None = None
+    terrain_code: str | None = None
     slope: float | None = None
     cell_size_ft: int | None = None
     time_step_min: float | None = None

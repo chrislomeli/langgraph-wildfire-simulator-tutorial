@@ -3,5 +3,8 @@ required_vars:
   - sector_id
   - max_rows
   - max_columns
+  - scenario
+  - history
+  - forecast
 
 

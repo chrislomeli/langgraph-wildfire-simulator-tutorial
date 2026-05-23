@@ -105,6 +105,11 @@ class ScriptedTrendPhysics(PhysicsModule[FireCellState]):
     def initial_cell_state(self, row: int, col: int, layer: int = 0) -> FireCellState:
         return FireCellState()
 
+    def get_plan(self, row: int, col: int, layer: int = 0):
+        key = (row,col,layer)
+        plan =   self._plan[key]
+        return plan
+
     def _resolve_start(
         self,
         r: int,

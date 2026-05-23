@@ -56,23 +56,22 @@ def make_fan_out_to_clusters(world_engine: GenericWorldEngine):
         advances to ``assess_situation`` once they complete.
         """
         changed = state.updates
-        sectors = world_engine.expand_sectors([(c.row, c.col) for c in changed])
+        # sectors = world_engine.expand_sectors([(c.row, c.col) for c in changed])
+
         logger.info(
-            "Supervisor fanning out %d changed cell(s) into %d sector(s)",
+            "Supervisor fanning out %d changed cell(s) ",
             len(changed),
-            len(sectors),
         )
 
         sends: list[Send] = []
-        for center, region in sectors.items():
-            anchor_row, anchor_col = center[0], center[1]
-            sector_id = f"sector({anchor_row},{anchor_col})"
+        for update_cell in changed:
+            sector_id = f"sector({update_cell.row},{update_cell.col})"
             cell_state = ClusterAgentState(
                 sector_id=sector_id,
-                anchor_row=anchor_row,
-                anchor_column=anchor_col,
+                anchor_row=update_cell.row,
+                anchor_column=update_cell.col,
                 workflow_id=f"{sector_id}::supervisor-fanout",
-                updated_cells=[UpdatedCell(row=row, col=col, layer=0) for row, col in region],
+                updated_cell=update_cell,
                 error=None,
             )
             sends.append(Send("run_cluster_agent", cell_state))
@@ -99,9 +98,11 @@ def make_run_cluster_agent(cluster_graph: CompiledStateGraph):
         sector_id = state.sector_id
         logger.info("Supervisor invoking cluster agent for cluster=%s", sector_id)
 
-        result = await cluster_graph.ainvoke(state)
+        result: ClusterAgentState = await cluster_graph.ainvoke(state)
         escalation = result["escalation"]
         return {
+            "briefings": result["briefing"],
+            "scenarios": result["scenario"],
             "escalations": [escalation] if escalation else [],
         }
 

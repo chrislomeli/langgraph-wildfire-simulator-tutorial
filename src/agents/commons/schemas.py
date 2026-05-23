@@ -151,25 +151,40 @@ class RiskAssessment(BaseModel):
     )
 
 
-class Escalation(BaseModel):
+class Evaluation(BaseModel):
     """Fire risk score for an individual cell."""
-    sector_id: str
-    anchor_row: int
-    anchor_column: int
     escalate: bool = Field(
-        description="TRUE if there is adequate risk that we should look at, and perhaps move existing fire fighting resources "
+        description="TRUE if there is adequate risk that the fire could ignite and spread to the point that we need to plan now"
     )
-
+    ignition_risk: int = Field(
+        ge=0,
+        le=10,
+        description="The risk of a fire starting at the anchor cell ",
+    )
+    spread_risk: int = Field(
+        ge=0,
+        le=10,
+        description="If the fire started, the risk that it could spread beyond the anchor cell ",
+    )
     confidence: int = Field(
         ge=0,
         le=3,
         description="confidence in risk_score",
     )
-    contributing_factors: list[str] = Field(
+    reasoning: list[str] = Field(
         default_factory=list,
-        description="What drove the assessment: e.g. ['temp=52°C (>38 threshold)', "
-                    "'humidity=12% (<15 critical)', 'terrain=grassland (high fuel)']",
+        description="""What drove the assessment: e.g. ['temp=52°C (>38 threshold)', 
+                    'humidity=12% (<15 critical)', 'terrain=grassland (high fuel)',,
+                    'fire has fuel and conditions to spread 10 cells to the NE"""
     )
+
+class Escalation(Evaluation):
+    """Fire risk score for an individual cell."""
+    sector_id: str
+    row: int
+    col: int
+    layer: int
+
 
 
 class CollatedRecordRisk(BaseModel):

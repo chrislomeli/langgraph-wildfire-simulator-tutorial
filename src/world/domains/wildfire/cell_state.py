@@ -20,7 +20,8 @@ import everything from one place.
 from __future__ import annotations
 
 from world.cell_state import CellState
-from world.grid import FireState, TerrainType
+from world.grid import FireState, TerrainType, TerrainCode
+
 
 # ── Cell state ───────────────────────────────────────────────────────────────
 
@@ -37,15 +38,17 @@ class FireCellState(CellState):
 
     # Terrain properties (set once during scenario setup, don't change)
     terrain_type: TerrainType = TerrainType.GRASSLAND
-    vegetation: float = 0.5
-    fuel_moisture: float = 0.3
+    terrain_code: TerrainCode = TerrainCode.GR
     slope: float = 0.0
 
     # Per-cell weather (seeded from DB, evolved by physics each tick)
+    vegetation: float = 0.5
+    fuel_moisture: float = 0.3
     temperature_c: float = 30.0
     humidity_pct: float = 25.0
     wind_speed_mps: float = 5.0
     wind_direction_deg: float = 0.0
+    precipitation: float = 0.0
     pressure_hpa: float = 1013.0
 
     # Fire state (changes during simulation via StateEvents)
@@ -76,6 +79,7 @@ class FireCellState(CellState):
             "terrain_type": self.terrain_type.value,
             "fire_state": self.fire_state.value,
             "fire_intensity": self.fire_intensity,
+            "precipitation" : self.precipitation,
         }
 
     def summary_label(self) -> str:
