@@ -45,6 +45,7 @@ import logging
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from typing import Any, Generic
 
 from pydantic import BaseModel
@@ -145,6 +146,8 @@ class GenericWorldEngine(Generic[C]):
 
         # Current simulation tick.  Starts at 0, incremented after each tick().
         self._tick: int = 0
+        self.start_date = date.today()
+
 
         # History of ground truth snapshots, one per tick.
         self.history: list[GenericGroundTruthSnapshot] = []
@@ -413,6 +416,7 @@ class GenericWorldEngine(Generic[C]):
             "periods": forecast_periods,
         }
 
+
     def calculate_history(self, fire_cell, plan: list) -> dict:
         """
         Build a NWS-style history from tick 0 to current_tick using the same
@@ -421,24 +425,30 @@ class GenericWorldEngine(Generic[C]):
         Tick 0 maps to (today - current_tick days); current_tick maps to today.
         Returns an empty periods list when current_tick is 0 (no history yet).
         """
-        from datetime import date, timedelta
-        today = date.today()
+        today = self.start_date
 
+        periods = 4
         history_periods = []
-        for tick in range(self.current_tick + 1):
-            day = today - timedelta(days=self.current_tick - tick)
+        simulation_date = self.start_date + timedelta(days=self.current_tick)
 
-            temp = self._resolve_metric("temperature_c", tick, plan, fire_cell.temperature_c)
-            precip = self._resolve_metric("precipitation", tick, plan, fire_cell.precipitation)
-            wind_speed = self._resolve_metric("wind_speed_mps", tick, plan, fire_cell.wind_speed_mps)
-            wind_dir = self._resolve_metric("wind_direction_deg", tick, plan, fire_cell.wind_direction_deg)
-            humidity = self._resolve_metric("humidity_pct", tick, plan, fire_cell.humidity_pct)
-            fuel_moisture = self._resolve_metric("fuel_moisture", tick, plan, fire_cell.fuel_moisture)
+        for count_down in range(periods,0,-1):
+            historical_date = simulation_date - timedelta(days=count_down)
+            t = self.current_tick - count_down
+            plan_tick = max(0, t)
+
+            # if the tick is negative we are going back further than we have data for to get to 'periods' value
+            # in that case we use the first valid tick and repeat it
+            temp = self._resolve_metric("temperature_c", plan_tick, plan, fire_cell.temperature_c)
+            precip = self._resolve_metric("precipitation", plan_tick, plan, fire_cell.precipitation)
+            wind_speed = self._resolve_metric("wind_speed_mps", plan_tick, plan, fire_cell.wind_speed_mps)
+            wind_dir = self._resolve_metric("wind_direction_deg", plan_tick, plan, fire_cell.wind_direction_deg)
+            humidity = self._resolve_metric("humidity_pct", plan_tick, plan, fire_cell.humidity_pct)
+            fuel_moisture = self._resolve_metric("fuel_moisture", plan_tick, plan, fire_cell.fuel_moisture)
             rain = f"{precip * .15} inches  per hour " if precip > .5 else "no rain"
 
             history_periods.append({
-                "number": tick + 1,
-                "date": day.isoformat(),
+                "number": t,
+                "date": historical_date.isoformat(),
                 "temperature": round(temp, 1),
                 "temperatureUnit": "C",
                 "precipitation": rain,
@@ -470,7 +480,7 @@ class GenericWorldEngine(Generic[C]):
         plan = self.physics.get_plan(row, col)
         return {
             "history": self.calculate_history(fire_cell=fire_cell, plan=plan),
-            "forecast": self.calculate_forecast(fire_cell=fire_cell, plan=plan, starting_tick=self.current_tick),
+            "forecast": self.calculate_forecast(fire_cell=fire_cell, plan=plan, starting_tick=self.current_tick + 1),
         }
 
 

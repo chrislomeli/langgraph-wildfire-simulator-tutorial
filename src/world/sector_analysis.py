@@ -105,7 +105,7 @@ class HotspotSectors(BaseModel):
             align_marker = "🔥 WIND-ALIGNED" if s.wind_aligned else ""
             stop_label = format_stop_reason(s.stop_reason)
             lines.append(
-                f"  {s.direction:2}: {s.burnable_miles:.1f}mi → {stop_label} | "
+                f"  {s.direction.value:2}: {s.burnable_miles:.1f}mi → {stop_label} | "
                 f"fuel={s.avg_vegetation:.2f} | moisture={s.avg_fuel_moisture:.2f} | "
                 f"slope={s.avg_slope:.1f}° | fire_intensity={s.max_fire_intensity:.2f} "
                 f"{align_marker}"

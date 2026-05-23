@@ -35,6 +35,7 @@ GridPosition follows GenericTerrainGrid's convention:
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -151,6 +152,14 @@ class RiskAssessment(BaseModel):
     )
 
 
+
+class SpreadRegion(BaseModel):
+    upper_left_corner: tuple[int,int]
+    lower_left_corner: tuple[int,int]
+    upper_right_corner: tuple[int,int]
+    lower_right_corner: tuple[int,int]
+
+
 class Evaluation(BaseModel):
     """Fire risk score for an individual cell."""
     escalate: bool = Field(
@@ -161,11 +170,11 @@ class Evaluation(BaseModel):
         le=10,
         description="The risk of a fire starting at the anchor cell ",
     )
-    spread_risk: int = Field(
-        ge=0,
-        le=10,
-        description="If the fire started, the risk that it could spread beyond the anchor cell ",
+    potential_spread_area: SpreadRegion | None = Field(
+        description="bounding box of a potential spread area expressed as (row,column) corners",
+        default=None
     )
+
     confidence: int = Field(
         ge=0,
         le=3,

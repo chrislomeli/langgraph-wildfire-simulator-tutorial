@@ -28,12 +28,114 @@ from world.grid import FireState, TerrainType, TerrainCode
 
 class FireCellState(CellState):
     """
-    Per-cell state for wildfire simulation.
-
-    This is a Pydantic model that implements the CellState ABC.
-    The generic grid carries these without interpreting them —
-    the FirePhysicsModule reads and produces new FireCellState
-    instances via StateEvents.
+    {
+      "source": "RMRS-GTR-153",
+      "artifact_type": "cell_state_field_mappings",
+      "description": "Explicit mapping between cell_state database columns and fire behavior fuel model concepts. Use this to translate sensor readings into fuel model reasoning inputs.",
+      "mappings": {
+        "fuel_type_number_blocks": {
+          "description": "Fuel model number ranges assigned per fuel type for mapping applications.",
+          "NB": {
+            "range": "90-99",
+            "label": "Nonburnable"
+          },
+          "GR": {
+            "range": "100-119",
+            "label": "Grass"
+          },
+          "GS": {
+            "range": "120-139",
+            "label": "Grass-Shrub"
+          },
+          "SH": {
+            "range": "140-159",
+            "label": "Shrub"
+          },
+          "TU": {
+            "range": "160-179",
+            "label": "Timber-Understory"
+          },
+          "TL": {
+            "range": "180-199",
+            "label": "Timber Litter"
+          },
+          "SB": {
+            "range": "200-219",
+            "label": "Slash-Blowdown"
+          }
+        },
+        "fuel_moisture": {
+          "document_concept": "Dead fuel moisture content",
+          "reasoning_guidance": "Map to dead fuel moisture scenarios D1-D4. Values below 6% approach D1 (Very Low). Values 6-9% map to D2 (Low). Values 9-12% map to D3 (Moderate). Values above 12% map to D4 (High). For dynamic fuel models, also estimate live herbaceous moisture using the herbaceous_curing_table if curing level is observable.",
+          "scenario_thresholds": {
+            "D1_Very_Low": {
+              "1hr_pct_max": 3
+            },
+            "D2_Low": {
+              "1hr_pct_max": 6
+            },
+            "D3_Moderate": {
+              "1hr_pct_max": 9
+            },
+            "D4_High": {
+              "1hr_pct_max": 12
+            }
+          }
+        },
+        "vegetation": {
+          "document_concept": "Live herbaceous moisture content / degree of curing",
+          "reasoning_guidance": "NDVI is a proxy for vegetation greenness and live fuel moisture. High NDVI (approaching 1.0) suggests uncured, green vegetation with live herbaceous moisture >= 120%. Low NDVI (approaching 0) suggests cured or absent vegetation with live herbaceous moisture <= 30%. Use as a continuous signal to interpolate live moisture scenario L1-L4 and to determine whether dynamic fuel models will transfer herbaceous load to dead.",
+          "ndvi_interpretation": {
+            "high_green": {
+              "ndvi_approx": ">0.5",
+              "live_herb_moisture": ">=120%",
+              "curing": "Uncured",
+              "live_scenario": "L4"
+            },
+            "moderate_green": {
+              "ndvi_approx": "0.3 to 0.5",
+              "live_herb_moisture": "75-120%",
+              "curing": "Partly Cured",
+              "live_scenario": "L3"
+            },
+            "low_green": {
+              "ndvi_approx": "0.1 to 0.3",
+              "live_herb_moisture": "30-75%",
+              "curing": "Mostly Cured",
+              "live_scenario": "L2"
+            },
+            "cured": {
+              "ndvi_approx": "<0.1",
+              "live_herb_moisture": "<=30%",
+              "curing": "Fully Cured",
+              "live_scenario": "L1"
+            }
+          }
+        },
+        "temperature_c": {
+          "document_concept": "Indirect influence on fuel moisture drying rate",
+          "reasoning_guidance": "Not a direct fuel model input. High temperatures accelerate fuel drying, pushing dead fuel moisture toward lower scenarios (D1/D2). Use as a contextual signal when fuel_moisture reading is absent or uncertain."
+        },
+        "humidity_pct": {
+          "document_concept": "Indirect influence on dead fuel moisture equilibrium",
+          "reasoning_guidance": "Not a direct fuel model input. Low relative humidity (< 20%) is associated with D1/D2 dead fuel moisture scenarios and elevated fire risk. High humidity (> 60%) is associated with D3/D4 scenarios and suppressed spread."
+        },
+        "wind_speed_mps": {
+          "document_concept": "Midflame wind speed",
+          "reasoning_guidance": "Direct fire behavior driver. Fire behavior charts in the document use midflame wind speed in mi/h. Convert: 1 m/s = 2.237 mi/h. Standard comparison charts run from 0 to 20 mi/h. Wind speed is the primary driver of rate of spread increase across all fuel types.",
+          "conversion": "mph = mps * 2.237"
+        },
+        "wind_direction_deg": {
+          "document_concept": "Fire spread direction",
+          "reasoning_guidance": "Used to determine headfire direction relative to fuel layout. Not a fuel model parameter per se, but critical for operational fire spread prediction. Combined with slope aspect, determines upslope/wind alignment scenarios.",
+          "wind_direction_interpretation": "Wind direction is meteorological (wind comes from the stated bearing, clockwise from North). Fire spreads opposite: bearing + 180° mod 360°. Western longitudes are negative — \"more west\" means more negative. Example: 90° reading at POINT(-118.541837, 34.286735) → wind from East → fire spreads West → toward lower (more negative) longitudes "
+        },
+        "risk_score": {
+          "document_concept": "Composite fire behavior risk assessment output",
+          "reasoning_guidance": "Derived field — should reflect combination of fuel type, dead fuel moisture scenario, live moisture scenario, and wind speed. Use fuel model parameters and adjective class thresholds to validate or compute."
+        }
+      }
+    }
     """
 
     # Terrain properties (set once during scenario setup, don't change)

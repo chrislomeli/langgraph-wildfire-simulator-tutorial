@@ -3,9 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from agents.commons import CellReadings, CollatedRecordRisk
 from agents.commons.agent_dependencies import AgentDependencies
-from agents.commons.schemas import Escalation, Evaluation
+from agents.commons.schemas import Evaluation, EvaluationCell, Escalation
 from agents.logistics.state import LogisticsAssessment
 from agents.supervisor import build_supervisor_graph
 from agents.supervisor.state import SupervisorGraph, SupervisorState
@@ -13,7 +12,6 @@ from config import get_settings
 from controllers.schemas import AdvisoryRequest
 from logging_config import configure_logging
 from prompts import PromptRegistry
-from tools.sectors import make_get_sectors
 
 configure_logging(level=logging.INFO)
 
@@ -37,7 +35,7 @@ def build_agent_deps(
     store = None
 
     prompt_registry = PromptRegistry()
-    prompt_registry.register_models(CellReadings, Evaluation, LogisticsAssessment)
+    prompt_registry.register_models(EvaluationCell, Evaluation, Escalation, LogisticsAssessment)
 
     return AgentDependencies(
         prompt_registry=prompt_registry,
@@ -60,8 +58,6 @@ async def handle_world_changes(request: AdvisoryRequest) -> None:
             data_store=data_store,
             bootstrap=False,
         )
-
-
 
         # inject dependencies package
         agent_dependencies = build_agent_deps(engine, data_store=data_store)

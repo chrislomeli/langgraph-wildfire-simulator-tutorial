@@ -1,221 +1,175 @@
-"""Tests for agents.cluster — state schema, node functions, graph."""
+"""Tests for agents.cluster — state schema, node functions, graph.
 
+The cluster agent is per-anchor-cell now: `apply_thresholds` (graph node
+"update_world") gates one `updated_cell` on a heuristic and, if it passes,
+selects it; `evaluate` produces a single `Escalation` (stub mode: deterministic)
+plus the per-cell briefing/scenario; `report_risk` is terminal.
+"""
+
+from langgraph.graph import END
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.store.memory import InMemoryStore
 
 from agents.cluster.graph import build_cluster_agent_graph
 from agents.cluster.nodes import (
+    make_apply_thresholds,
     make_evaluate_node,
     make_report_risk_node,
-    make_apply_thresholds,
     route_after_evaluate,
+    route_after_filter,
 )
 from agents.cluster.state import ClusterAgentState
-from agents.commons.schemas import (
-    CellReadings,
-    CollatedRecordRisk,
-    GridPosition,
-)
+from agents.commons.schemas import Escalation, EvaluationCell
 from agents.commons.state_types import StatusValue
+from controllers.schemas import UpdatedCell
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _make_readings(
-    cluster_id: str = "cluster-north",
-    row: int = 0,
-    col: int = 0,
-) -> CellReadings:
-    return CellReadings(
-        cluster_id=cluster_id,
-        position=GridPosition(row=row, col=col),
+def _make_state(**overrides) -> ClusterAgentState:
+    base = ClusterAgentState(anchor_row=0, anchor_column=0, workflow_id="test-run-1")
+    return base.model_copy(update=overrides) if overrides else base
+
+
+def _selected_cell(engine, row: int, col: int) -> EvaluationCell:
+    """Build the EvaluationCell apply_thresholds would hand to evaluate."""
+    cell = engine.grid.get_cell(row, col)
+    return EvaluationCell(
+        row=cell.row, col=cell.col, layer=cell.layer,
+        state=cell.cell_state, attributes=cell.attributes,
     )
 
 
-def _make_state(**overrides) -> ClusterAgentState:
-    base = ClusterAgentState(cluster_id="cluster-north", workflow_id="test-run-1")
-    return base.model_copy(update=overrides) if overrides else base
+def _make_ignitable(engine, row: int, col: int) -> None:
+    """Push a cell past the heuristic gate: hot + dry = 2 of 4 factors → score 5."""
+    cs = engine.grid.get_cell(row, col).cell_state
+    cs.temperature_c = 50.0  # > 32
+    cs.humidity_pct = 10.0   # < 15
 
 
 # ── ClusterAgentState schema tests ───────────────────────────────────────────
 
+
 class TestClusterAgentState:
     def test_defaults(self):
-        state = ClusterAgentState(cluster_id="c1", workflow_id="w1")
-        assert state.cluster_id == "c1"
+        state = ClusterAgentState(anchor_row=1, anchor_column=2, workflow_id="w1")
+        assert state.anchor_row == 1
+        assert state.anchor_column == 2
         assert state.workflow_id == "w1"
-        assert state.readings == []
-        assert state.escalated_cells == []
+        assert state.anchor_layer == 0
+        assert state.escalation is None
+        assert state.briefing == {}
+        assert state.scenario == {}
         assert state.messages == []
         assert state.status == StatusValue.IDLE
 
-    def test_cluster_id_has_uuid_default(self):
-        state = ClusterAgentState(workflow_id="w1")
-        assert state.cluster_id  # non-empty UUID string
+    def test_sector_id_has_uuid_default(self):
+        state = ClusterAgentState(anchor_row=0, anchor_column=0, workflow_id="w1")
+        assert state.sector_id  # non-empty UUID string
+
+
+# ── apply_thresholds (graph node "update_world") tests ────────────────────────
+
+
+class TestApplyThresholds:
+    def test_below_threshold_completes_without_selecting(self, agent_deps):
+        # Default grassland cell — no risk factors → heuristic 0 → COMPLETED.
+        node = make_apply_thresholds(world_engine=agent_deps.world_engine)
+        result = node(_make_state(updated_cell=UpdatedCell(row=0, col=0, layer=0)))
+        assert result["status"] == StatusValue.COMPLETED
+        assert result["heuristic_score"] == 0
+        assert "selected_cell" not in result
+
+    def test_above_threshold_selects_cell_and_processes(self, agent_deps):
+        _make_ignitable(agent_deps.world_engine, 1, 1)
+        node = make_apply_thresholds(world_engine=agent_deps.world_engine)
+        result = node(_make_state(updated_cell=UpdatedCell(row=1, col=1, layer=0)))
+        assert result["status"] == StatusValue.PROCESSING
+        assert result["heuristic_score"] >= 3
+        assert isinstance(result["selected_cell"], EvaluationCell)
+        assert (result["selected_cell"].row, result["selected_cell"].col) == (1, 1)
+
+    def test_missing_cell_errors(self, agent_deps):
+        node = make_apply_thresholds(world_engine=agent_deps.world_engine)
+        result = node(_make_state(updated_cell=UpdatedCell(row=99, col=99, layer=0)))
+        assert result["status"] == StatusValue.ERROR
 
 
 # ── evaluate node tests ───────────────────────────────────────────────────────
 
+
 class TestEvaluateNode:
-    async def test_empty_cells_returns_empty_assessments(self, agent_deps):
+    async def test_stub_produces_escalation(self, agent_deps):
+        engine = agent_deps.world_engine
         evaluate = make_evaluate_node(
             prompt_registry=agent_deps.prompt_registry,
             llm_registry=agent_deps.llm_registry,
-            world_engine=agent_deps.world_engine,
+            world_engine=engine,
         )
-        state = _make_state()
+        state = _make_state(
+            anchor_row=2, anchor_column=2, selected_cell=_selected_cell(engine, 2, 2)
+        )
         result = await evaluate(state)
-        assert result["escalations"] == []
         assert result["status"] == StatusValue.PROCESSING
+        esc = result["escalation"]
+        assert isinstance(esc, Escalation)
+        assert 0 <= esc.ignition_risk <= 10
+        assert 0 <= esc.confidence <= 3
+        assert (esc.row, esc.col) == (2, 2)
 
-    async def test_stub_produces_one_risk_per_cell(self, agent_deps):
+    async def test_writes_briefing_and_scenario_keyed_by_cell(self, agent_deps):
+        engine = agent_deps.world_engine
         evaluate = make_evaluate_node(
             prompt_registry=agent_deps.prompt_registry,
             llm_registry=agent_deps.llm_registry,
-            world_engine=agent_deps.world_engine,
+            world_engine=engine,
         )
-        cells = [{"row": 0, "col": 0}, {"row": 0, "col": 1}]
-        state = _make_state(updated_cells=cells)
+        state = _make_state(
+            anchor_row=2, anchor_column=3, selected_cell=_selected_cell(engine, 2, 3)
+        )
         result = await evaluate(state)
-        assert len(result["escalations"]) == 2
-        for risk in result["escalations"]:
-            assert isinstance(risk, CollatedRecordRisk)
-            assert 0 <= risk.risk_score <= 10
-            assert 0 <= risk.confidence <= 3
-
-    async def test_stub_writes_risk_to_cell(self, agent_deps):
-        """evaluate must write CellRiskAssessment onto the grid cell so
-        sector_analysis can find hotspots."""
-        from agents.commons.schemas import CellRiskAssessment
-        evaluate = make_evaluate_node(
-            prompt_registry=agent_deps.prompt_registry,
-            llm_registry=agent_deps.llm_registry,
-            world_engine=agent_deps.world_engine,
-        )
-        # heuristic_score must be >= HEURISTIC_EVALUATE_THRESHOLD to pass the gate
-        state = _make_state(updated_cells=[{"row": 2, "col": 3, "heuristic_score": 5}])
-        await evaluate(state)
-        cell = agent_deps.world_engine.grid.get_cell(2, 3)
-        assert isinstance(cell.risk_assessment, CellRiskAssessment)
+        assert (2, 3, 0) in result["briefing"]
+        assert (2, 3, 0) in result["scenario"]
 
 
+# ── routing tests ─────────────────────────────────────────────────────────────
 
-# ── route_after_evaluate tests ────────────────────────────────────────────────
+
+class TestRouteAfterFilter:
+    def test_processing_routes_to_evaluate(self):
+        assert route_after_filter(_make_state(status=StatusValue.PROCESSING)) == "evaluate"
+
+    def test_completed_routes_to_end(self):
+        assert route_after_filter(_make_state(status=StatusValue.COMPLETED)) == END
+
+    def test_error_routes_to_end(self):
+        assert route_after_filter(_make_state(status=StatusValue.ERROR)) == END
+
 
 class TestRouteAfterEvaluate:
     def test_routes_to_report_risk_when_processing(self):
-        state = _make_state(status=StatusValue.PROCESSING)
-        assert route_after_evaluate(state) == "report_risk"
+        assert route_after_evaluate(_make_state(status=StatusValue.PROCESSING)) == "report_risk"
 
     def test_routes_to_report_risk_when_idle(self):
-        state = _make_state()  # default status: IDLE
-        assert route_after_evaluate(state) == "report_risk"
+        assert route_after_evaluate(_make_state()) == "report_risk"
 
     def test_routes_to_end_on_error(self):
-        from langgraph.graph import END
-        state = _make_state(status=StatusValue.ERROR)
-        assert route_after_evaluate(state) == END
+        assert route_after_evaluate(_make_state(status=StatusValue.ERROR)) == END
 
     def test_routes_to_end_on_completed(self):
-        from langgraph.graph import END
-        state = _make_state(status=StatusValue.COMPLETED)
-        assert route_after_evaluate(state) == END
+        assert route_after_evaluate(_make_state(status=StatusValue.COMPLETED)) == END
 
 
 # ── report_risk node tests ────────────────────────────────────────────────────
 
+
 class TestReportRiskNode:
     def test_sets_completed_status(self, agent_deps):
         report_risk = make_report_risk_node(world_engine=agent_deps.world_engine, store=None)
-        state = _make_state()
-        result = report_risk(state)
+        result = report_risk(_make_state(escalation=None))
         assert result["status"] == StatusValue.COMPLETED
-
-    def test_no_store_does_not_raise(self, agent_deps):
-        report_risk = make_report_risk_node(world_engine=agent_deps.world_engine, store=None)
-        state = _make_state(escalations=[])
-        result = report_risk(state)
-        assert result["status"] == StatusValue.COMPLETED
-
-    def test_writes_to_store_when_provided(self, agent_deps):
-        store = InMemoryStore()
-        report_risk = make_report_risk_node(world_engine=agent_deps.world_engine, store=store)
-        assessment = CollatedRecordRisk(
-            position=GridPosition(row=1, col=2),
-            risk_score=7,
-            confidence=3,
-            confidence_rationale="test",
-            contributing_factors=["high temp"],
-        )
-        state = _make_state(
-            cluster_id="cluster-north",
-            escalations=[assessment],
-        )
-        report_risk(state)
-        items = store.search(("escalations", "cluster-north"))
-        assert len(items) == 1
-        assert items[0].value["risk_score"] == 7
-
-    def test_empty_assessments_writes_nothing_to_store(self, agent_deps):
-        store = InMemoryStore()
-        report_risk = make_report_risk_node(world_engine=agent_deps.world_engine, store=store)
-        state = _make_state(cluster_id="cluster-north", escalations=[])
-        report_risk(state)
-        items = store.search(("escalations", "cluster-north"))
-        assert len(items) == 0
-
-    def test_multiple_assessments_stored_by_position(self, agent_deps):
-        store = InMemoryStore()
-        report_risk = make_report_risk_node(world_engine=agent_deps.world_engine, store=store)
-        assessments = [
-            CollatedRecordRisk(
-                position=GridPosition(row=r, col=c),
-                risk_score=5,
-                confidence=2,
-                confidence_rationale="test",
-                contributing_factors=[],
-            )
-            for r, c in [(0, 0), (1, 1), (2, 2)]
-        ]
-        state = _make_state(cluster_id="cluster-north", escalations=assessments)
-        report_risk(state)
-        items = store.search(("escalations", "cluster-north"))
-        assert len(items) == 3
 
 
 # ── graph integration tests ───────────────────────────────────────────────────
-
-class TestUpdateWorldReadsGrid:
-    """Step 6c: update_world reads grid ground truth by position; metric
-    values are NOT carried in the payload (they were written upstream by
-    CellStateManager.update)."""
-
-    def test_emits_cell_from_grid_not_from_metrics(self, agent_deps):
-        engine = agent_deps.world_engine
-        # Sentinel the grid with a value no default or metric would produce.
-        engine.grid.get_cell(1, 2).cell_state.temperature_c = 99.0
-
-        update_world = make_apply_thresholds(world_engine=engine)
-        state = ClusterAgentState(
-            cluster_id="cluster-north",
-            workflow_id="t-6c",
-            readings=[
-                CellReadings(
-                    cluster_id="cluster-north",
-                    position=GridPosition(row=1, col=2),
-                )  # no value transport — update_world must read the grid
-            ],
-        )
-
-        result = update_world(state)
-        cells = result["updated_cells"]
-
-        assert len(cells) == 1
-        assert (cells[0]["row"], cells[0]["col"]) == (1, 2)
-        # Value comes from the grid (99.0), proving it is the source of truth.
-        assert cells[0]["cell_state"]["temperature_c"] == 99.0
-        # Heuristic recomputed from grid: only temp>32 → round(1/4*10) == 2.
-        assert cells[0]["heuristic_score"] == 2
 
 
 class TestClusterAgentGraph:
@@ -223,28 +177,28 @@ class TestClusterAgentGraph:
         graph = build_cluster_agent_graph(agent_deps=agent_deps)
         assert isinstance(graph, CompiledStateGraph)
 
-    def test_graph_nodes_are_evaluate_and_report_risk(self, agent_deps):
+    def test_graph_nodes_are_update_world_evaluate_report_risk(self, agent_deps):
         graph = build_cluster_agent_graph(agent_deps=agent_deps)
         node_names = set(graph.get_graph().nodes.keys())
-        assert "evaluate" in node_names
-        assert "report_risk" in node_names
+        assert {"update_world", "evaluate", "report_risk"} <= node_names
 
-    async def test_invoke_with_readings_produces_escalations(self, agent_deps):
+    async def test_below_threshold_completes_without_escalation(self, agent_deps):
         graph = build_cluster_agent_graph(agent_deps=agent_deps)
-        state = ClusterAgentState(
-            cluster_id="cluster-north",
-            workflow_id="test-graph-1",
-            readings=[_make_readings()],
+        state = _make_state(
+            anchor_row=0, anchor_column=0, updated_cell=UpdatedCell(row=0, col=0, layer=0)
         )
         result = await graph.ainvoke(state)
         assert result["status"] == StatusValue.COMPLETED
+        # Below-threshold path never reaches evaluate, so no escalation is written.
+        assert result.get("escalation") is None
 
-    async def test_invoke_empty_readings_completes_cleanly(self, agent_deps):
+    async def test_above_threshold_produces_escalation(self, agent_deps):
+        _make_ignitable(agent_deps.world_engine, 3, 3)
         graph = build_cluster_agent_graph(agent_deps=agent_deps)
-        state = ClusterAgentState(
-            cluster_id="cluster-north",
-            workflow_id="test-empty",
+        state = _make_state(
+            anchor_row=3, anchor_column=3, updated_cell=UpdatedCell(row=3, col=3, layer=0)
         )
         result = await graph.ainvoke(state)
         assert result["status"] == StatusValue.COMPLETED
-        assert result["escalations"] == []
+        assert isinstance(result["escalation"], Escalation)
+        assert (result["escalation"].row, result["escalation"].col) == (3, 3)

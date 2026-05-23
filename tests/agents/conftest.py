@@ -5,6 +5,7 @@ import pytest
 import agents.cluster.nodes as cluster_nodes
 from agents.commons import CellReadings, RiskAssessment
 from agents.commons.agent_dependencies import AgentDependencies
+from agents.commons.schemas import Escalation, Evaluation, EvaluationCell
 from llm.llm_registry import LLMRegistry
 from prompts import PromptRegistry
 
@@ -27,7 +28,11 @@ def agent_deps(engine) -> AgentDependencies:
     Both are constructed with minimal config — no API credentials needed.
     """
     registry = PromptRegistry()
-    registry.register_models(RiskAssessment, CellReadings)
+    # EvaluationCell + Evaluation back the `| schema` filters in the evaluate
+    # prompt the cluster evaluate node renders (even in stub mode).
+    registry.register_models(
+        RiskAssessment, CellReadings, EvaluationCell, Evaluation, Escalation
+    )
     return AgentDependencies(
         llm_registry=LLMRegistry({"classifier": None}),
         prompt_registry=registry,

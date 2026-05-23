@@ -68,6 +68,17 @@ class SimpleFirePhysicsModule(PhysicsModule[FireCellState]):
         """Return the default cell state — unburned grassland."""
         return FireCellState()
 
+    def get_plan(self, row: int, col: int, layer: int = 0) -> list:
+        """No scripted weather plan — this model drives spread probabilistically.
+
+        Returning an empty list satisfies the PhysicsModule contract (the base
+        marks ``get_plan`` abstract for the scripted-trend driver) and makes the
+        engine's forecast/briefing helpers hold every metric at the cell
+        baseline, since ``_resolve_metric`` falls back to baseline when a metric
+        has no plan segments.
+        """
+        return []
+
     def tick_physics(
         self,
         grid: GenericTerrainGrid[FireCellState],

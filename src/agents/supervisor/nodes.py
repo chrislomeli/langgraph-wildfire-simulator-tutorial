@@ -99,10 +99,13 @@ def make_run_cluster_agent(cluster_graph: CompiledStateGraph):
         logger.info("Supervisor invoking cluster agent for cluster=%s", sector_id)
 
         result: ClusterAgentState = await cluster_graph.ainvoke(state)
-        escalation = result["escalation"]
+        # A cluster that completes below the heuristic gate never reaches
+        # evaluate, so escalation/briefing/scenario are never written. Use .get
+        # so those clusters contribute nothing rather than raising KeyError.
+        escalation = result.get("escalation")
         return {
-            "briefings": result["briefing"],
-            "scenarios": result["scenario"],
+            "briefings": result.get("briefing", {}),
+            "scenarios": result.get("scenario", {}),
             "escalations": [escalation] if escalation else [],
         }
 
@@ -156,9 +159,15 @@ def make_run_logistics_agent(logistics_graph: CompiledStateGraph):
 
     @node_executor("run_logistics_agent")
     def run_logistics_agent(state: SupervisorState) -> dict:
+        # Hand the logistics agent the hotspots the cluster agents already found
+        # and escalated — anchor, ignition_risk, confidence, reasoning, and the
+        # spread bounding box — plus the per-hotspot scenario/briefing context.
+        escalated = [e for e in state.escalations if e.escalate]
         logistics_state = LogisticsAgentState(
             situation_summary=state.situation_summary or "",
-            cluster_findings=state.cluster_findings,
+            escalations=escalated,
+            scenarios=state.scenarios,
+            briefings=state.briefings,
         )
         result = logistics_graph.invoke(logistics_state)
         plan = result.get("logistics_plan")

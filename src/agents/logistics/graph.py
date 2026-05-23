@@ -13,9 +13,11 @@ Topology
 
 The ReAct loop
 ──────────────
-1. sector_analysis scans the world grid for hotspots (cells with
-   cell.risk_assessment.risk_score >= threshold), produces an 8-sector
-   radial summary per hotspot, and writes it into state.situation_summary.
+1. sector_analysis consumes the escalations the cluster agents already found
+   (anchor, ignition_risk, confidence, reasoning, spread bounding box). For
+   each it runs a live 8-sector radial trace, then renders that trace together
+   with the cluster's spread-risk scenario and weather forecast into
+   state.situation_summary. It does NOT rescan the grid for hotspots.
 2. logistics_agent calls the LLM with that summary plus data_store tools.
 3. If the LLM returns tool calls, ToolNode executes them and appends
    ToolMessages to state.messages. Then logistics_agent is called again.
@@ -64,7 +66,7 @@ def build_logistics_agent_graph(*, agent_deps: AgentDependencies) -> LogisticsGr
     ──────────
     agent_deps : AgentDependencies
         DI container. Relevant fields:
-          - world_engine  : grid that sector_analysis scans for hotspots
+          - world_engine  : grid that sector_analysis traces around each escalation
           - data_store    : DataStore facade (resources + wildfire + advisory tools)
           - llm_registry  : LLM lookup by role (for logistics_agent node)
     """

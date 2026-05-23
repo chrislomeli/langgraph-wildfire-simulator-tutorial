@@ -4,7 +4,8 @@ from langchain_core.messages import AIMessage
 from langgraph.graph import END
 from langgraph.graph.state import CompiledStateGraph
 
-from agents.commons.schemas import CellRiskAssessment
+from agents.commons.agent_dependencies import AgentDependencies
+from agents.commons.schemas import Escalation, SpreadRegion
 from agents.commons.state_types import StatusValue
 from agents.logistics.graph import build_logistics_agent_graph
 from agents.logistics.nodes import (
@@ -12,6 +13,42 @@ from agents.logistics.nodes import (
     route_after_logistics_agent,
 )
 from agents.logistics.state import LogisticsAgentState
+from llm.llm_registry import LLMRegistry
+from prompts import PromptRegistry
+from world import GenericWorldEngine
+from world.domains.wildfire import ScriptedTrendPhysics
+from world.domains.wildfire.environment import FireEnvironmentState
+from world.generic_grid import GenericTerrainGrid
+
+# ── Fixtures ──────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def agent_deps() -> AgentDependencies:
+    """Logistics-only AgentDependencies on a lightweight real engine.
+
+    Overrides the shared agents/conftest `agent_deps` (which builds on the
+    `engine` fixture). That fixture currently can't instantiate because
+    FirePhysicsModule is abstract after the scripted-trend migration; the
+    logistics graph only needs a real GenericWorldEngine for sector_analysis to
+    trace, so we build a minimal 5x5 grassland one with ScriptedTrendPhysics.
+    """
+    physics = ScriptedTrendPhysics(plan={})
+    grid = GenericTerrainGrid(
+        rows=5, cols=5, initial_state_factory=physics.initial_cell_state
+    )
+    env = FireEnvironmentState(
+        temperature_c=38.0, humidity_pct=12.0, wind_speed_mps=8.0,
+        wind_direction_deg=225.0, pressure_hpa=1008.0,
+    )
+    engine = GenericWorldEngine(grid=grid, environment=env, physics=physics)
+    return AgentDependencies(
+        llm_registry=LLMRegistry({"logistics": None, "logistics_extract": None}),
+        prompt_registry=PromptRegistry(),
+        store=None,
+        world_engine=engine,
+    )
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -21,12 +58,18 @@ def _make_state(**overrides) -> LogisticsAgentState:
     return base.model_copy(update=overrides) if overrides else base
 
 
-def _plant_hotspot(engine, row: int, col: int, risk_score: int = 7) -> None:
-    cell = engine.grid.get_cell(row, col)
-    cell.risk_assessment = CellRiskAssessment(
-        risk_score=risk_score,
+def _escalation(row: int, col: int, ignition_risk: int = 7) -> Escalation:
+    """An escalated hotspot the supervisor would hand to the logistics graph."""
+    return Escalation(
+        escalate=True,
+        ignition_risk=ignition_risk,
         confidence=2,
-        confidence_rationale="planted for test",
+        reasoning=[f"planted hotspot at ({row},{col})"],
+        potential_spread_area=SpreadRegion(
+            upper_left_corner=(row, col), upper_right_corner=(row, col + 1),
+            lower_left_corner=(row + 1, col), lower_right_corner=(row + 1, col + 1),
+        ),
+        sector_id=f"sector({row},{col})", row=row, col=col, layer=0,
     )
 
 
@@ -160,17 +203,21 @@ class TestLogisticsGraphIntegration:
         assert result["logistics_plan"] is not None
 
     async def test_invoke_with_hotspot_completes(self, agent_deps):
-        _plant_hotspot(agent_deps.world_engine, row=2, col=2, risk_score=8)
         graph = build_logistics_agent_graph(agent_deps=agent_deps)
-        state = LogisticsAgentState(workflow_id="test-with-hotspot")
+        state = LogisticsAgentState(
+            workflow_id="test-with-hotspot",
+            escalations=[_escalation(2, 2, ignition_risk=8)],
+        )
         result = await graph.ainvoke(state)
         assert result["status"] == StatusValue.COMPLETED
 
     async def test_invoke_with_hotspot_situation_summary_populated(self, agent_deps):
         """sector_analysis must write situation_summary before logistics_agent runs."""
-        _plant_hotspot(agent_deps.world_engine, row=2, col=2, risk_score=8)
         graph = build_logistics_agent_graph(agent_deps=agent_deps)
-        state = LogisticsAgentState(workflow_id="test-summary")
+        state = LogisticsAgentState(
+            workflow_id="test-summary",
+            escalations=[_escalation(2, 2, ignition_risk=8)],
+        )
         result = await graph.ainvoke(state)
         assert result["situation_summary"]
-        assert "hotspot" in result["situation_summary"].lower() or "2" in result["situation_summary"]
+        assert "(2, 2)" in result["situation_summary"]

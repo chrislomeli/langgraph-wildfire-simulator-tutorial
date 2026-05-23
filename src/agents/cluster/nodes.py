@@ -42,7 +42,7 @@ from agents.commons.node_executor import node_executor
 from agents.commons.routing import route_base
 from agents.commons.schemas import (
     Colors,
-    Escalation, EvaluationCell, Evaluation
+    Escalation, EvaluationCell, Evaluation, SpreadRegion
 )
 from agents.commons.state_types import StatusValue
 from controllers.schemas import UpdatedCell
@@ -184,15 +184,15 @@ def make_evaluate_node(
 
         """
         evaluate_cell: EvaluationCell = state.selected_cell
-        max_rows, max_columns = world_engine.get_bounding()
-        row, col, layer = evaluate_cell.row, evaluate_cell.col, 0
-
         if not evaluate_cell:
             logger.warning("ClusterAgent evaluate: no cells to evaluate")
             return {
                 "escalation": None,
                 "status": StatusValue.PROCESSING,
             }
+
+        max_rows, max_columns = world_engine.get_bounding()
+        row, col, layer = evaluate_cell.row, evaluate_cell.col, 0
 
         # provide a breakdown of conditions surrounding the changed cell
         scenario = world_engine.get_spread_risk_summary(row, col)
@@ -208,6 +208,8 @@ def make_evaluate_node(
                 sector_id=state.sector_id,
                 max_rows=max_rows,
                 max_columns=max_columns,
+                row=row,
+                column=col,
                 scenario=json.dumps(scenario, indent=2),
                 history=json.dumps(history, indent=2),
                 forecast=json.dumps(forecast, indent=2),
@@ -223,7 +225,7 @@ def make_evaluate_node(
             evaluation =   Evaluation(
                     escalate=True,
                     ignition_risk=5,
-                    spread_risk=1,
+                    potential_spread_area=SpreadRegion(upper_left_corner=(5,5),  upper_right_corner=(5,10), lower_left_corner=(6,5), lower_right_corner=(6,15)),
                     confidence=3,
                     reasoning=["this is a dummy escalation"]
                 )

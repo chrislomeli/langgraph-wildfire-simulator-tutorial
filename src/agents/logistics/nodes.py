@@ -39,8 +39,7 @@ from langchain_core.messages import (
 from langgraph.graph import END
 
 from agents.commons.node_executor import node_executor
-from agents.commons.risk_view import GridRiskView, RiskView
-from agents.commons.schemas import Colors
+from agents.commons.schemas import Colors, Escalation, SpreadRegion
 from agents.commons.state_types import StatusValue
 from agents.logistics.state import LogisticsAgentState, LogisticsAssessment
 from llm.llm_registry import LLMRegistry
@@ -60,104 +59,203 @@ logger = logging.getLogger(__name__)
 # True = no LLM, no tool calls, returns stub plan immediately.
 # Flip to False once the prompt and LLM are wired in.
 
-STUB_LOGISTICS = False
+STUB_LOGISTICS = True
+
+
+# ── Hotspot context rendering ───────────────────────────────────────────────────
+#
+# The logistics LLM reasons over a text "situation summary". Per the chosen
+# design, each escalated hotspot is rendered with THREE complementary views:
+#   1. The escalation header — why the cluster agent flagged it (ignition_risk,
+#      confidence, reasoning) and its estimated spread bounding box.
+#   2. A live 8-sector radial trace of the grid (burnable_miles + barriers) —
+#      the settlement-in-path / natural-firebreak signal the advisory hinges on.
+#   3. The cluster's spread-risk scenario (per-direction ignition risk) and the
+#      weather forecast, both computed upstream and carried in logistics state.
+
+
+def _render_spread_box(box: SpreadRegion | None) -> str:
+    if box is None:
+        return "  (no spread-area estimate provided)"
+    return (
+        f"  corners (row,col): UL{tuple(box.upper_left_corner)} "
+        f"UR{tuple(box.upper_right_corner)} "
+        f"LL{tuple(box.lower_left_corner)} "
+        f"LR{tuple(box.lower_right_corner)}"
+    )
+
+
+def _render_scenario(scenario: dict | None) -> str:
+    if not scenario:
+        return "  (no cluster spread-risk summary available)"
+    lines = [
+        f"  Wind from {scenario.get('wind_from_compass', '?')} "
+        f"({scenario.get('wind_from_degrees', 0)}°) at "
+        f"{scenario.get('wind_speed_mps', 0)} m/s"
+    ]
+    for d in ("N", "NE", "E", "SE", "S", "SW", "W", "NW"):
+        entry = scenario.get(d)
+        if not isinstance(entry, dict):
+            continue
+        lines.append(
+            f"  {d:<2}: ignition-risk avg={entry.get('avg_risk', 0):.2f} "
+            f"max={entry.get('max_risk', 0):.2f} "
+            f"({entry.get('risk_level', '?')}, {entry.get('cell_count', 0)} cells)"
+        )
+    return "\n".join(lines)
+
+
+def _render_forecast(briefing: dict | None, periods: int = 4) -> str:
+    if not briefing or not briefing.get("forecast"):
+        return "  (no forecast available)"
+    rows = briefing["forecast"].get("periods", [])[:periods]
+    if not rows:
+        return "  (no forecast periods)"
+    lines = []
+    for p in rows:
+        pop = (p.get("probabilityOfPrecipitation") or {}).get("value", 0)
+        lines.append(
+            f"  {p.get('date', '?')}: {p.get('temperature')}"
+            f"{p.get('temperatureUnit', '')} RH={p.get('humidity_pct')}% "
+            f"wind={p.get('windSpeed')} {p.get('windDirection')} "
+            f"fuel_moisture={p.get('fuel_moisture')} precip={pop}%"
+        )
+    return "\n".join(lines)
+
+
+def _render_hotspot_context(
+    escalation: Escalation,
+    hotspot: HotspotSectors,
+    scenario: dict | None,
+    briefing: dict | None,
+) -> str:
+    """Render one escalated hotspot into the rich combined situation block."""
+    parts = [f"========== Hotspot ({escalation.row}, {escalation.col}) =========="]
+    if escalation.reasoning:
+        parts.append("Why the cluster agent escalated it:")
+        parts += [f"  - {r}" for r in escalation.reasoning]
+    parts.append("Estimated spread area (cluster bounding box):")
+    parts.append(_render_spread_box(escalation.potential_spread_area))
+    parts.append("")
+    parts.append("Radial sector trace (live grid scan — burnable distance & barriers):")
+    parts.append(hotspot.to_context_string())
+    parts.append("")
+    parts.append("Spread-risk by direction (cluster ignition-risk summary):")
+    parts.append(_render_scenario(scenario))
+    parts.append("")
+    parts.append("Weather forecast (upcoming periods):")
+    parts.append(_render_forecast(briefing))
+    return "\n".join(parts)
 
 
 def make_sector_analysis_node(
     world: WorldView,
     risk_threshold: int = 5,
     max_sector_miles: float = 20.0,
-    risk_view: RiskView | None = None,
 ):
-    """Factory: creates node that analyzes radial sectors around fire hotspots.
+    """Factory: builds the logistics situation summary from the escalations.
 
-    Scans the grid for cells with risk_score >= threshold and builds
-    8-sector radial summaries for each hotspot. This compresses 2000+ cells
-    into ~24 sector summaries (3 hotspots × 8 sectors).
+    The cluster agents have already found and scored the hotspots. Each
+    ``Escalation`` carries an anchor cell, ignition_risk, confidence, the
+    reasoning that flagged it, and an estimated spread bounding box. This node
+    consumes those escalations directly — it does NOT rediscover hotspots by
+    scanning the grid (the old RiskView/grid-scan path is gone).
+
+    For each escalated hotspot it builds a ``HotspotSectors`` via a live
+    8-sector radial trace (burnable distance + barriers), then renders a rich
+    text block combining that trace with the cluster's spread-risk scenario and
+    the weather forecast carried in logistics state.
 
     Parameters
     ──────────
-    world : Read-only view over the world (the engine satisfies this).
-    risk_threshold : Minimum risk_score to qualify as a hotspot
-    max_sector_miles : Maximum distance to trace in each sector
+    world            : Read-only view over the world (the engine satisfies this).
+    risk_threshold   : Advisory guidance threshold, shown in the summary header.
+                       The upstream ``escalate`` flag is the actual gate.
+    max_sector_miles : Maximum distance to trace in each radial sector.
 
     Returns
     ───────
-    Node function that returns {"sector_analysis": [...], "status": PROCESSING}
+    Node function that returns {"sector_analysis": [...], "situation_summary":
+    str, "status": PROCESSING}.
     """
-    # Risk read seam. Defaults to the in-memory grid scan (identical to the
-    # previous inline behaviour); a persistent binding can be injected for
-    # deployments where risk does not live on an in-process grid.
-    view: RiskView = risk_view or GridRiskView(world)
-
     cell_size_ft = world.cell_size_ft
     max_cells = int((max_sector_miles * 5280) / cell_size_ft)
-    
+
     @node_executor("sector_analysis")
     def sector_analysis(state: LogisticsAgentState) -> dict:
-        """Analyze radial sectors around high-risk hotspots."""
-        hotspots = []
+        """Build per-hotspot situation context from the escalations."""
+        escalations = [e for e in state.escalations if e.escalate]
 
-        # Hotspot discovery via the RiskView seam — symmetric with the
-        # write path (report_risk -> store). GridRiskView reproduces the
-        # previous in-place grid scan exactly (row-major, same filter), so
-        # behaviour is unchanged for the in-memory demo.
-        for spot in view.hotspots(risk_threshold):
-            row, col = spot.row, spot.col
+        if not escalations:
+            logger.info("sector_analysis: no escalated hotspots handed to logistics")
+            return {
+                "sector_analysis": [],
+                "situation_summary": "No escalated hotspots were handed to logistics.",
+                "status": StatusValue.PROCESSING,
+            }
+
+        hotspots: list[HotspotSectors] = []
+        context_parts = [
+            f"{len(escalations)} escalated fire hotspot(s) handed off for resource "
+            f"assessment (advisory threshold risk ≥ {risk_threshold}):",
+            "",
+        ]
+
+        for esc in escalations:
+            row, col = esc.row, esc.col
             cell = world.get_cell(row, col)
+            wind_dir = getattr(cell.cell_state, "wind_direction_deg", 0) if cell else 0
 
-            # Wind direction is observed-world topology; read from the grid.
-            wind_dir = getattr(cell.cell_state, 'wind_direction_deg', 0)
-
-            # Analyze 8 radial sectors
+            # Live 8-sector radial trace — burnable distance + barriers.
             sectors = []
             for sector_name, (dr, dc) in SECTOR_VECTORS.items():
                 _miles, sector_cells, stop_reason = trace_sector(
                     world, row, col, dr, dc, max_cells, cell_size_ft
                 )
-                sector_summary = analyze_sector(
-                    sector_name, sector_cells, stop_reason, wind_dir, cell_size_ft
+                sectors.append(
+                    analyze_sector(
+                        sector_name, sector_cells, stop_reason, wind_dir, cell_size_ft
+                    )
                 )
-                sectors.append(sector_summary)
 
             hotspot = HotspotSectors(
                 epicenter_row=row,
                 epicenter_col=col,
-                risk_score=spot.risk_score,
-                confidence=spot.confidence,
-                sectors=sectors
+                risk_score=esc.ignition_risk,
+                confidence=esc.confidence,
+                sectors=sectors,
             )
             hotspots.append(hotspot)
 
-            logger.info(
-                "Hotspot at (%d, %d): Risk=%d, 8 sectors analyzed, "
-                "max_burnable=%.1f miles",
-                row, col, spot.risk_score,
-                max(s.burnable_miles for s in sectors)
+            # Pull the cluster's per-hotspot context. Keys are (row, col, layer);
+            # the cluster stores them at layer 0, so fall back to that.
+            scenario = state.scenarios.get((row, col, esc.layer)) or state.scenarios.get(
+                (row, col, 0)
             )
-        
-        # Build context string for LLM
-        if hotspots:
-            context_parts = [
-                f"Found {len(hotspots)} fire hotspot(s) with risk ≥ {risk_threshold}:",
-                ""
-            ]
-            for h in hotspots:
-                context_parts.append(h.to_context_string())
-                context_parts.append("")
-            context = "\n".join(context_parts)
-        else:
-            context = f"No fire hotspots found with risk ≥ {risk_threshold}."
-        
-        logger.info("Sector analysis complete: %d hotspots, %d total sectors", 
-                   len(hotspots), len(hotspots) * 8)
-        
+            briefing = state.briefings.get((row, col, esc.layer)) or state.briefings.get(
+                (row, col, 0)
+            )
+            context_parts.append(_render_hotspot_context(esc, hotspot, scenario, briefing))
+            context_parts.append("")
+
+            logger.info(
+                "Hotspot at (%d, %d): ignition_risk=%d, 8 sectors traced, "
+                "max_burnable=%.1f miles",
+                row, col, esc.ignition_risk,
+                max(s.burnable_miles for s in sectors),
+            )
+
+        logger.info(
+            "sector_analysis complete: %d hotspot(s), %d total sectors",
+            len(hotspots), len(hotspots) * 8,
+        )
+
         return {
             "sector_analysis": [h.model_dump() for h in hotspots],
-            "situation_summary": context,
-            "status": StatusValue.PROCESSING
+            "situation_summary": "\n".join(context_parts),
+            "status": StatusValue.PROCESSING,
         }
-    
+
     return sector_analysis
 
 
@@ -202,6 +300,41 @@ def make_logistics_agent_node(tools: list, prompt_registry: PromptRegistry, llm_
         Always returns an AIMessage. The router inspects it: tool_calls present
         → "tools" (keep looping); absent → "extract_plan" (Phase 2).
         """
+        # The logistics prompt is only needed for the live LLM call. Render it
+        # defensively so a stub-only deployment — or a missing/broken template —
+        # doesn't take down the stub path. A failure here is surfaced as a
+        # warning; the live path below proceeds without a system prompt.
+        try:
+            system_prompt = prompt_registry.render("logistics", {"state": state})
+        except Exception as exc:  # noqa: BLE001 — keep the stub path resilient
+            logger.warning("logistics_agent: 'logistics' prompt render failed: %s", exc)
+            system_prompt = None
+
+        # Build the conversation as DISTINCT, role-tagged messages. On the first
+        # call state.messages is empty, so we seed the human turn; on later ReAct
+        # iterations it already holds the prior AIMessage(tool_calls) + ToolMessages
+        # (appended by add_messages). Do NOT wrap this list in a single
+        # HumanMessage — that collapses the tool-call/result history into one
+        # turn's content and breaks the loop (and fails validation once the list
+        # contains Message objects).
+        convo = list(state.messages)
+        if not convo:
+            convo = [
+                HumanMessage(
+                    content=(
+                        f"Situation summary:\n\n{state.situation_summary}\n\n"
+                        "Using the tools available, gather resource information for "
+                        "each hotspot and decide whether a ResourceAdvisory is warranted."
+                    )
+                )
+            ]
+
+        # Visibility regardless of stub mode — log what we would send.
+        logger.info("logistics_agent SYSTEM prompt:\n%s", system_prompt)
+        logger.info(
+            "logistics_agent OUTGOING: %s",
+            [(type(m).__name__, m.content) for m in convo],
+        )
 
         if STUB_LOGISTICS or llm_with_tools is None:
             print(f"""\n{Colors.YELLOW}● STUB the LLM - no call to logistics {Colors.RESET}""")
@@ -213,26 +346,11 @@ def make_logistics_agent_node(tools: list, prompt_registry: PromptRegistry, llm_
                 "status": StatusValue.COMPLETED,
             }
 
-        # Call the LLM
-        system_prompt = prompt_registry.render(
-            "logistics",
-            {"state": state},
-        )
-
-        messages = list(state.messages)
-        if not messages:
-            content = (
-                f"Situation summary:\n\n{state.situation_summary}\n\n"
-                "Using the tools available, gather resource information for each "
-                "hotspot and decide whether a ResourceAdvisory is warranted."
-            )
-            messages = [HumanMessage(content=content)]
-
-        # Prepend system prompt on every call — it carries the instructions and
-        # sector analysis format description the LLM needs on each ReAct iteration.
-        messages = [SystemMessage(system_prompt)] + messages
-
-        response = llm_with_tools.invoke(messages)
+        # Prepend the system prompt on every call — it carries the instructions
+        # and sector-analysis format the LLM needs on each ReAct iteration. If
+        # the render failed above we proceed without it (already warned).
+        outgoing = [SystemMessage(content=system_prompt), *convo] if system_prompt else list(convo)
+        response = llm_with_tools.invoke(outgoing)
 
         if getattr(response, "tool_calls", None):
             logger.info(

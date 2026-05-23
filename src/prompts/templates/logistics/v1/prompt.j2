@@ -47,20 +47,37 @@ An advisory is NOT warranted when AT LEAST ONE of these holds:
 
 ## What You Have Been Given
 
-### Sector Analysis (in this message)
-A pre-computed radial summary for each high-risk hotspot. For each hotspot:
+The situation summary in this message lists the escalated hotspots the upstream
+risk agents already identified. You are NOT discovering hotspots — assess the
+ones handed to you. For each hotspot you are given four complementary views:
+
+### 1. Escalation header — why it was flagged
   - Grid coordinates (epicenter_row, epicenter_col) — use these exactly
-  - risk_score (0–10), confidence (0–3)
-  - 8 radial sectors (N, NE, E, SE, S, SW, W, NW), each showing:
-      - burnable_miles: continuous burnable distance before a barrier
-      - stop_reason — read carefully:
-          🚨 URBAN (settlement at risk) — populated area in the potential spread path
-          WATER / ROCK / SNOW — natural barrier, limits potential spread
-          grid edge — spread is unbounded within available data
-      - avg_vegetation, avg_fuel_moisture, avg_slope, max_fire_intensity
-      - wind_aligned: True if this direction matches current wind
+  - ignition_risk (0–10), confidence (0–3)
+  - The reasoning the risk agent gave for escalating
+  - Estimated spread area: a bounding box (corner row/col coordinates) of where
+    the risk agent expects spread. Treat it as a coarse hint, not a measurement.
+
+### 2. Radial sector trace (live grid scan)
+8 radial sectors (N, NE, E, SE, S, SW, W, NW), each showing:
+  - burnable_miles: continuous burnable distance before a barrier
+  - stop_reason — read carefully:
+      🚨 URBAN (settlement at risk) — populated area in the potential spread path
+      WATER / ROCK / SNOW — natural barrier, limits potential spread
+      grid edge — spread is unbounded within available data
+  - avg_vegetation, avg_fuel_moisture, avg_slope, max_fire_intensity
+  - wind_aligned: True if this direction matches current wind
 
 A wind-aligned sector ending in 🚨 URBAN is your highest-priority signal.
+
+### 3. Spread-risk by direction (ignition-risk summary)
+Per-direction ignition-risk (avg/max + a label) from the surrounding cells. This
+tells you which directions are most ignitable; the radial trace above tells you
+how far fire could run and what is in its path. Read them together.
+
+### 4. Weather forecast
+Upcoming temperature, humidity, wind, and fuel moisture. Use it to judge whether
+conditions are worsening or easing over the planning horizon.
 
 ## Tools Available
 
