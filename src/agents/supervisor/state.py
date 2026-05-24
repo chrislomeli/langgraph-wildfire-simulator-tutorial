@@ -17,25 +17,18 @@ locations:
 
 Reducers
 ────────
-max_cluster_score: Records the highest risk score reported for each cluster
-  across parallel cluster-agent sends in a single tick. Because each cluster
-  is sent exactly once per tick, this is effectively a last-write-wins merge,
-  with max() as the defensive fallback if that ever changes.
-
-merge_cluster_findings: Stores the full list of CollatedRecordRisk objects
-  per cluster. Per-cluster entries overwrite (each cluster is sent once).
-
-messages: Standard add_messages — appends, never overwrites.
+escalations : operator.add — concatenates each cluster's escalation.
+briefings / scenarios / evaluated : operator.or_ — per-cell dict merge.
+messages : Standard add_messages — appends, never overwrites.
 
 Node responsibilities
 ──────────────────────
   fan_out_to_clusters : Conditional-edge function (not a node) that returns
                         list[Send] — one Send per active cluster.
-  run_cluster_agent   : Invokes the cluster subgraph; lifts risk scores and
-                        findings into supervisor state via reducers.
-  assess_situation    : Stub — summarises findings across clusters.
-  decide_actions      : Stub — returns empty command list.
-  dispatch_commands   : Stub — logs commands; final node before END.
+  run_cluster_agent   : Invokes the cluster subgraph; lifts escalations,
+                        briefings, and scenarios into supervisor state.
+  assess_situation    : Stub — summarises escalations across clusters.
+  dispatch_commands   : Stub — logs the plan; final node before END.
 """
 
 from __future__ import annotations
@@ -50,8 +43,6 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 
 from agents.commons.schemas import (
-    CellReadings,
-    CollatedRecordRisk,
     Escalation,
     TracedState,
 )
@@ -76,44 +67,7 @@ class ActuatorCommand(BaseModel):
     priority: int = 3
 
 
-# ── Reducers ─────────────────────────────────────────────────────────────────
-
-
-def max_cluster_score(
-    existing: dict[str, RiskScore],
-    incoming: dict[str, RiskScore],
-) -> dict[str, RiskScore]:
-
-    merged = dict(existing)
-    for sector_id, score in incoming.items():
-        current = merged.get(sector_id)
-        merged[sector_id] = (
-            max([current, score], key=lambda s: s.risk_score if s else -1) if current else score
-        )
-    return merged
-
-
-def merge_cluster_findings(
-    existing: dict[str, list[CollatedRecordRisk]],
-    incoming: dict[str, list[CollatedRecordRisk]],
-) -> dict[str, list[CollatedRecordRisk]]:
-    """Merge per-cluster risk findings by overwriting each cluster's entry.
-
-    Each cluster is fanned-out exactly once per supervisor invocation, so
-    the incoming entry for a cluster always replaces the prior value.
-    """
-    merged = dict(existing)
-    for sector_id, risks in incoming.items():
-        merged[sector_id] = risks
-    return merged
-
-
 # ── Supervisor state ─────────────────────────────────────────────────────────
-
-
-class RiskScore(BaseModel):
-    risk_score: int
-    confidence: int
 
 
 class SupervisorState(TracedState):
@@ -133,16 +87,6 @@ class SupervisorState(TracedState):
     scenarios: Annotated[dict, operator.or_] = Field(default_factory=dict)
     evaluated: Annotated[dict, operator.or_] = Field(default_factory=dict)
 
-    # # ── Input Legacy────────────────────────────────────────────────────────
-    # clusters: dict[str, list[CellReadings]] = Field(default_factory=dict)
-
-    # ── Aggregated output of cluster fan-out ─────────────────────────
-    # cluster_score: Annotated[dict[str, RiskScore], max_cluster_score] = Field(default_factory=dict)
-
-    # cluster_findings: Annotated[dict[str, list[CollatedRecordRisk]], merge_cluster_findings] = (
-    #     Field(default_factory=dict)
-    # )
-
     # ── LLM reasoning (reserved for when the LLM is wired in) ────────
     messages: Annotated[list[BaseMessage], add_messages] = Field(default_factory=list)
 
@@ -153,4 +97,4 @@ class SupervisorState(TracedState):
     situation_summary: str | None = None
 
     # ── Logistics plan (written by run_logistics_agent node) ─────────
-    # logistics_plan: str | None = None
+    logistics_plan: str | None = None

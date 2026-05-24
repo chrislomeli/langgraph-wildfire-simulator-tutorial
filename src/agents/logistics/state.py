@@ -73,7 +73,7 @@ class LogisticsAgentState(TracedState):
     The agent reads heatmap + resources via tools and writes logistics_plan.
     """
 
-    workflow_id: str = Field(default_factory=lambda: str(uuid.uuid4()))  #  todo - if this is supposed to be a Correlation ID value - it's not being used that way?
+    workflow_id: str = Field(default_factory=lambda: str(uuid.uuid4()))  #  todo - if this is supposed to be a tracking value - it's not being used that way?
 
     # ── Input (populated by supervisor before invoking this graph) ────────────
     situation_summary: str = ""

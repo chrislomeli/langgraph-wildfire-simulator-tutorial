@@ -42,7 +42,7 @@ from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import Field
 
-from agents.commons.schemas import CellReadings, Escalation, EvaluationCell, TracedState
+from agents.commons.schemas import Escalation, EvaluationCell, TracedState
 from controllers.schemas import UpdatedCell
 
 # ── Typed graph ────────────────────────────────────────────────────
@@ -83,4 +83,3 @@ class ClusterAgentState(TracedState):
 
     # ── Legacy ─────────────────────────────────────────────────
     workflow_id: str  # todo is this a Correlation ID
-    readings: list[CellReadings] = Field(default_factory=list)

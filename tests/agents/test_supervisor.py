@@ -2,15 +2,14 @@
 
 The supervisor is escalation-based now: it fans out one cluster agent per
 changed cell (`state.updates`), collects each cluster's `Escalation`, summarises
-them, and routes to logistics when any escalated. The `max_cluster_score` /
-`merge_cluster_findings` reducers still exist and are exercised directly.
+them, and routes to logistics when any escalated.
 """
 
 from langgraph.graph import END
 
 from agents.cluster.graph import build_cluster_agent_graph
 from agents.cluster.state import ClusterAgentState
-from agents.commons.schemas import CollatedRecordRisk, Escalation, GridPosition
+from agents.commons.schemas import Escalation
 from agents.commons.state_types import StatusValue
 from agents.supervisor.nodes import (
     assess_situation,
@@ -21,12 +20,7 @@ from agents.supervisor.nodes import (
     route_after_assess,
     route_after_decide,
 )
-from agents.supervisor.state import (
-    RiskScore,
-    SupervisorState,
-    max_cluster_score,
-    merge_cluster_findings,
-)
+from agents.supervisor.state import SupervisorState
 from controllers.schemas import UpdatedCell
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -35,16 +29,6 @@ from controllers.schemas import UpdatedCell
 def _make_state(**overrides) -> SupervisorState:
     base = SupervisorState()
     return base.model_copy(update=overrides) if overrides else base
-
-
-def _make_risk(row: int = 0, col: int = 0, score: int = 5) -> CollatedRecordRisk:
-    return CollatedRecordRisk(
-        position=GridPosition(row=row, col=col),
-        risk_score=score,
-        confidence=3,
-        confidence_rationale="test",
-        contributing_factors=["test factor"],
-    )
 
 
 def _escalation(row: int, col: int, escalate: bool = True, ignition_risk: int = 7) -> Escalation:
@@ -65,66 +49,6 @@ def _make_ignitable(engine, row: int, col: int) -> None:
     cs = engine.grid.get_cell(row, col).cell_state
     cs.temperature_c = 50.0
     cs.humidity_pct = 10.0
-
-
-# ── max_cluster_score reducer tests ──────────────────────────────────────────
-
-
-class TestMaxClusterScoreReducer:
-    def test_adds_new_cluster(self):
-        result = max_cluster_score({}, {"cluster-north": RiskScore(risk_score=7, confidence=4)})
-        assert result == {"cluster-north": RiskScore(risk_score=7, confidence=4)}
-
-    def test_keeps_higher_score(self):
-        result = max_cluster_score(
-            {"cluster-north": RiskScore(risk_score=5, confidence=4)},
-            {"cluster-north": RiskScore(risk_score=8, confidence=4)},
-        )
-        assert result["cluster-north"].risk_score == 8
-
-    def test_keeps_existing_if_higher(self):
-        result = max_cluster_score(
-            {"cluster-north": RiskScore(risk_score=9, confidence=4)},
-            {"cluster-north": RiskScore(risk_score=3, confidence=4)},
-        )
-        assert result["cluster-north"].risk_score == 9
-
-    def test_merges_disjoint_clusters(self):
-        result = max_cluster_score(
-            {"cluster-north": RiskScore(risk_score=5, confidence=4)},
-            {"cluster-south": RiskScore(risk_score=7, confidence=4)},
-        )
-        assert set(result) == {"cluster-north", "cluster-south"}
-
-    def test_both_empty(self):
-        assert max_cluster_score({}, {}) == {}
-
-
-# ── merge_cluster_findings reducer tests ─────────────────────────────────────
-
-
-class TestMergeClusterFindingsReducer:
-    def test_adds_new_cluster(self):
-        result = merge_cluster_findings({}, {"cluster-north": [_make_risk(score=5)]})
-        assert len(result["cluster-north"]) == 1
-
-    def test_overwrites_existing_cluster(self):
-        """Each cluster is fanned-out exactly once per tick — last write wins."""
-        result = merge_cluster_findings(
-            {"cluster-north": [_make_risk(score=3)]},
-            {"cluster-north": [_make_risk(score=7)]},
-        )
-        assert result["cluster-north"][0].risk_score == 7
-
-    def test_merges_disjoint_clusters(self):
-        result = merge_cluster_findings(
-            {"cluster-north": [_make_risk()]}, {"cluster-south": [_make_risk()]}
-        )
-        assert set(result) == {"cluster-north", "cluster-south"}
-
-    def test_empty_list_value_allowed(self):
-        result = merge_cluster_findings({}, {"cluster-north": []})
-        assert result["cluster-north"] == []
 
 
 # ── fan_out_to_clusters tests ─────────────────────────────────────────────────

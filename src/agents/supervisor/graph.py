@@ -16,9 +16,10 @@ The Send API pattern
 ────────────────────
 ``fan_out_to_clusters`` returns a list of ``Send()`` objects. LangGraph
 runs all of them in parallel, merges their results into the supervisor
-state via the ``max_cluster_score`` and ``merge_cluster_findings`` reducers,
-then advances to ``assess_situation``. This implicit synchronization barrier
-is the key LangGraph skill these two graphs together demonstrate.
+state via the channel reducers (``operator.add`` for escalations,
+``operator.or_`` for the per-cell dicts), then advances to
+``assess_situation``. This implicit synchronization barrier is the key
+LangGraph skill these two graphs together demonstrate.
 
 Why a separate supervisor graph?
 ─────────────────────────────────
