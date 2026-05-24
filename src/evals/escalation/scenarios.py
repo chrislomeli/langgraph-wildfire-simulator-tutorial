@@ -17,7 +17,7 @@ Scoring knobs per scenario:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from agents.commons.schemas import EvaluationCell
 from world.domains.wildfire.cell_state import FireCellState

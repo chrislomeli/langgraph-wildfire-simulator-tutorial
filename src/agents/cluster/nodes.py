@@ -42,7 +42,11 @@ from agents.commons.node_executor import node_executor
 from agents.commons.routing import route_base
 from agents.commons.schemas import (
     Colors,
-    Escalation, EvaluationCell, Evaluation, SpreadRegion, Corner
+    Corner,
+    Escalation,
+    Evaluation,
+    EvaluationCell,
+    SpreadRegion,
 )
 from agents.commons.state_types import StatusValue
 from controllers.schemas import UpdatedCell
@@ -305,47 +309,6 @@ def make_report_risk_node(world_engine: GenericWorldEngine, store: BaseStore | N
         ────────────
           - status : COMPLETED
         """
-        escalation = state.escalation
-        # assessments = state.escalated_cells
-        # sector_id = state.sector_id
-        # grid = world_engine.grid
-        #
-        # for assessment in assessments:
-        #     cell = grid.get_cell(assessment.position.row, assessment.position.col)
-        #     heuristic = getattr(cell, "heuristic", None)
-        #     if heuristic is not None:
-        #         divergence = abs(assessment.risk_score - heuristic)
-        #         if divergence > 4:
-        #             logger.warning(
-        #                 "ClusterAgent[%s] heuristic divergence at (%s,%s): llm=%s heuristic=%s delta=%s",
-        #                 sector_id,
-        #                 assessment.position.row,
-        #                 assessment.position.col,
-        #                 assessment.risk_score,
-        #                 heuristic,
-        #                 divergence,
-        #             )
-        #
-        # if store is not None and assessments:
-        #     for assessment in assessments:
-        #         key = f"{assessment.position.row}_{assessment.position.col}"
-        #         store.put(
-        #             ("escalations", sector_id),
-        #             key,
-        #             assessment.model_dump(mode="json"),
-        #         )
-        #     logger.info(
-        #         "ClusterAgent[%s] wrote %d risk assessment(s) to store",
-        #         sector_id,
-        #         len(assessments),
-        #     )
-        # else:
-        #     logger.info(
-        #         "ClusterAgent[%s] completed with %d risk assessment(s)",
-        #         sector_id,
-        #         len(assessments) if assessments else 0,
-        #     )
-
         return {"status": StatusValue.COMPLETED}
 
     return report_risk

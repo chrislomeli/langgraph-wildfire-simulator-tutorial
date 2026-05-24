@@ -49,8 +49,13 @@ from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 
-from agents.commons.schemas import CellReadings, CollatedRecordRisk, TracedState, Escalation, EvaluationCell
-from controllers.schemas import AdvisoryRequest, UpdatedCell
+from agents.commons.schemas import (
+    CellReadings,
+    CollatedRecordRisk,
+    Escalation,
+    TracedState,
+)
+from controllers.schemas import UpdatedCell
 
 # ── Typed graph ────────────────────────────────────────────────────
 SupervisorGraph = NewType("SupervisorGraph", CompiledStateGraph)

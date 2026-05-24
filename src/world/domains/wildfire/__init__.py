@@ -28,14 +28,14 @@ from world.domains.wildfire.physics import SimpleFirePhysicsModule as SimpleFire
 from world.domains.wildfire.rothermel_physics import (
     RothermelFirePhysicsModule as RothermelFirePhysicsModule,
 )
-from world.domains.wildfire.scripted_trend_physics import (
-    ScriptedTrendPhysics as ScriptedTrendPhysics,
-)
 from world.domains.wildfire.scenarios import create_basic_wildfire as create_basic_wildfire
 from world.domains.wildfire.scenarios import (
     create_full_wildfire_scenario as create_full_wildfire_scenario,
 )
 from world.domains.wildfire.scenarios import create_wildfire_resources as create_wildfire_resources
+from world.domains.wildfire.scripted_trend_physics import (
+    ScriptedTrendPhysics as ScriptedTrendPhysics,
+)
 
 __all__ = [
     # Cell state

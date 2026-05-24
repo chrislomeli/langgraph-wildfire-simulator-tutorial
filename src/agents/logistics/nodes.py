@@ -26,7 +26,6 @@ STUB_LOGISTICS = False : requires the "logistics" role (Phase 1 ReAct loop)
 
 from __future__ import annotations
 
-import json
 import logging
 
 from langchain_core.messages import (
@@ -46,9 +45,12 @@ from llm.llm_registry import LLMRegistry
 from prompts import PromptRegistry
 from stores.base import AdvisoryRepository
 from tools.advisory import dispatch_advisory
-from world import GenericWorldEngine, TerrainType, FireState, Direction, SECTOR_VECTORS, HotspotSectors, trace_sector, \
-    analyze_sector
-from world.cell_state import GenericCell
+from world import (
+    SECTOR_VECTORS,
+    HotspotSectors,
+    analyze_sector,
+    trace_sector,
+)
 from world.world_view import WorldView
 
 logger = logging.getLogger(__name__)

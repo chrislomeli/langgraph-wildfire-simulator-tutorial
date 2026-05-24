@@ -43,9 +43,9 @@ configure_logging(level=logging.INFO)
 
 from stores import get_postgres_data_store  # noqa: E402
 from world import iter_tick_events  # noqa: E402
+from world.domains.wildfire.scenario_loader import start_world_service  # noqa: E402
 from world.state_snapshot import CellStateSnapshot  # noqa: E402
 from world.tick_events import TickChangeEvent  # noqa: E402
-from world.domains.wildfire.scenario_loader import start_world_service  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

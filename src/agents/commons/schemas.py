@@ -35,7 +35,6 @@ GridPosition follows GenericTerrainGrid's convention:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TypeVar
 
 from pydantic import BaseModel, Field
 

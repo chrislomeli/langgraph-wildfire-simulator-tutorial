@@ -42,7 +42,7 @@ from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import Field
 
-from agents.commons.schemas import CellReadings, TracedState, Escalation, EvaluationCell
+from agents.commons.schemas import CellReadings, Escalation, EvaluationCell, TracedState
 from controllers.schemas import UpdatedCell
 
 # ── Typed graph ────────────────────────────────────────────────────

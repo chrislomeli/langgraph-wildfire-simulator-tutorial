@@ -25,10 +25,11 @@ import logging
 from langgraph.graph import END, START, StateGraph
 
 from agents.cluster.nodes import (
+    make_apply_thresholds,
     make_evaluate_node,
     make_report_risk_node,
-    make_apply_thresholds,
-    route_after_evaluate, route_after_filter,
+    route_after_evaluate,
+    route_after_filter,
 )
 from agents.cluster.state import ClusterAgentState, StreamingRiskGraph
 from agents.commons.agent_dependencies import AgentDependencies

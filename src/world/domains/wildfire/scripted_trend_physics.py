@@ -48,8 +48,8 @@ from world.generic_grid import GenericTerrainGrid
 from world.physics import PhysicsModule, StateEvent
 
 if TYPE_CHECKING:
-    from world.domains.wildfire.environment import FireEnvironmentState
     from stores.schemas import ScenarioPlanSegment
+    from world.domains.wildfire.environment import FireEnvironmentState
 
 # Per-metric physical bounds (match RothermelFirePhysicsModule for parity).
 # wind_direction_deg is special-cased (wraps mod 360).

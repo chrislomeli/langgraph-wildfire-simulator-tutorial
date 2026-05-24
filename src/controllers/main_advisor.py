@@ -17,10 +17,10 @@ from prompts import PromptRegistry
 
 configure_logging(level=logging.INFO)
 
-from stores import get_postgres_data_store, DataStore  # noqa: E402
+from llm.llm_registry import LLM_ROLE_CONFIG, build_llm_registry, models  # noqa: E402
+from stores import DataStore, get_postgres_data_store  # noqa: E402
 from world import GenericWorldEngine  # noqa: E402
 from world.domains.wildfire.scenario_loader import start_world_service  # noqa: E402
-from llm.llm_registry import LLM_ROLE_CONFIG, build_llm_registry, models  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

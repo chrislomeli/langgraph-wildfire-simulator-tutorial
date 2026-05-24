@@ -23,9 +23,7 @@ from typing import Annotated, NewType
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import Field
-
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agents.commons.schemas import Escalation, TracedState
 from stores.schemas import ResourceAdvisory

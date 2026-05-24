@@ -25,7 +25,6 @@ from evals.framework.evaluators import BooleanVote, NumericTolerance
 from evals.framework.reporting import render_scorecard
 from evals.framework.stores import InMemoryStore
 
-
 # ── A toy "agent output" + "expectation" (stand-ins for real schemas) ───────────
 
 

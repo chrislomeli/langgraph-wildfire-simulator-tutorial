@@ -23,7 +23,6 @@ from langchain_core.tools import tool
 from agents.commons.schemas import Colors, EvaluationCell
 from world import GenericWorldEngine
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Tool factory
 # ═══════════════════════════════════════════════════════════════════════════════

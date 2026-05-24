@@ -195,7 +195,7 @@ class GenericWorldEngine(Generic[C]):
     def get_cell(self, row: int, col: int, layer: int = 0):
         try:
             return self.grid.get_cell(row, col, layer)
-        except Exception as e:
+        except Exception:
             return  None
 
 
@@ -351,9 +351,12 @@ class GenericWorldEngine(Generic[C]):
 
     @staticmethod
     def _risk_label(score: float) -> str:
-        if score >= 0.7:  return "HIGH"
-        if score >= 0.4:  return "MEDIUM"
-        if score >= 0.1:  return "LOW"
+        if score >= 0.7:
+            return "HIGH"
+        if score >= 0.4:
+            return "MEDIUM"
+        if score >= 0.1:
+            return "LOW"
         return "MINIMAL"
 
     # ── Forecast ─────────────────────────────────────────────────────────────

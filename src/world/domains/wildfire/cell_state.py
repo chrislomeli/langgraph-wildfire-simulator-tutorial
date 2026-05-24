@@ -20,8 +20,7 @@ import everything from one place.
 from __future__ import annotations
 
 from world.cell_state import CellState
-from world.grid import FireState, TerrainType, TerrainCode
-
+from world.grid import FireState, TerrainCode, TerrainType
 
 # ── Cell state ───────────────────────────────────────────────────────────────
 
