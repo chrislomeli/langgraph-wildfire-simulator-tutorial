@@ -85,7 +85,6 @@ def _escalation(
 
 def _make_state(escalations=None, **overrides) -> LogisticsAgentState:
     base = LogisticsAgentState(
-        workflow_id="test-logistics",
         escalations=escalations or [],
     )
     return base.model_copy(update=overrides) if overrides else base

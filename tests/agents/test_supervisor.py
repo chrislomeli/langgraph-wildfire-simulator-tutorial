@@ -83,7 +83,7 @@ class TestRunClusterAgent:
     async def test_default_cell_produces_no_escalation(self, agent_deps):
         run_node = make_run_cluster_agent(build_cluster_agent_graph(agent_deps=agent_deps))
         state = ClusterAgentState(
-            anchor_row=0, anchor_column=0, workflow_id="t",
+            anchor_row=0, anchor_column=0,
             updated_cell=UpdatedCell(row=0, col=0, layer=0),
         )
         result = await run_node(state)
@@ -93,7 +93,7 @@ class TestRunClusterAgent:
         _make_ignitable(agent_deps.world_engine, 2, 2)
         run_node = make_run_cluster_agent(build_cluster_agent_graph(agent_deps=agent_deps))
         state = ClusterAgentState(
-            anchor_row=2, anchor_column=2, workflow_id="t",
+            anchor_row=2, anchor_column=2,
             updated_cell=UpdatedCell(row=2, col=2, layer=0),
         )
         result = await run_node(state)

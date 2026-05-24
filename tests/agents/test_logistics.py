@@ -54,7 +54,7 @@ def agent_deps() -> AgentDependencies:
 
 
 def _make_state(**overrides) -> LogisticsAgentState:
-    base = LogisticsAgentState(workflow_id="test-logistics")
+    base = LogisticsAgentState()
     return base.model_copy(update=overrides) if overrides else base
 
 
@@ -192,20 +192,19 @@ class TestLogisticsAgentNodeStub:
 class TestLogisticsGraphIntegration:
     async def test_invoke_no_hotspots_completes(self, agent_deps):
         graph = build_logistics_agent_graph(agent_deps=agent_deps)
-        state = LogisticsAgentState(workflow_id="test-no-hotspots")
+        state = LogisticsAgentState()
         result = await graph.ainvoke(state)
         assert result["status"] == StatusValue.COMPLETED
 
     async def test_invoke_no_hotspots_produces_plan(self, agent_deps):
         graph = build_logistics_agent_graph(agent_deps=agent_deps)
-        state = LogisticsAgentState(workflow_id="test-no-hotspots")
+        state = LogisticsAgentState()
         result = await graph.ainvoke(state)
         assert result["logistics_plan"] is not None
 
     async def test_invoke_with_hotspot_completes(self, agent_deps):
         graph = build_logistics_agent_graph(agent_deps=agent_deps)
         state = LogisticsAgentState(
-            workflow_id="test-with-hotspot",
             escalations=[_escalation(2, 2, ignition_risk=8)],
         )
         result = await graph.ainvoke(state)
@@ -215,7 +214,6 @@ class TestLogisticsGraphIntegration:
         """sector_analysis must write situation_summary before logistics_agent runs."""
         graph = build_logistics_agent_graph(agent_deps=agent_deps)
         state = LogisticsAgentState(
-            workflow_id="test-summary",
             escalations=[_escalation(2, 2, ignition_risk=8)],
         )
         result = await graph.ainvoke(state)

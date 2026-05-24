@@ -26,7 +26,7 @@ from controllers.schemas import UpdatedCell
 
 
 def _make_state(**overrides) -> ClusterAgentState:
-    base = ClusterAgentState(anchor_row=0, anchor_column=0, workflow_id="test-run-1")
+    base = ClusterAgentState(anchor_row=0, anchor_column=0)
     return base.model_copy(update=overrides) if overrides else base
 
 
@@ -51,10 +51,9 @@ def _make_ignitable(engine, row: int, col: int) -> None:
 
 class TestClusterAgentState:
     def test_defaults(self):
-        state = ClusterAgentState(anchor_row=1, anchor_column=2, workflow_id="w1")
+        state = ClusterAgentState(anchor_row=1, anchor_column=2)
         assert state.anchor_row == 1
         assert state.anchor_column == 2
-        assert state.workflow_id == "w1"
         assert state.anchor_layer == 0
         assert state.escalation is None
         assert state.briefing == {}
@@ -63,7 +62,7 @@ class TestClusterAgentState:
         assert state.status == StatusValue.IDLE
 
     def test_sector_id_has_uuid_default(self):
-        state = ClusterAgentState(anchor_row=0, anchor_column=0, workflow_id="w1")
+        state = ClusterAgentState(anchor_row=0, anchor_column=0)
         assert state.sector_id  # non-empty UUID string
 
 

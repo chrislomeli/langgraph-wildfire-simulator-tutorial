@@ -66,7 +66,6 @@ def make_fan_out_to_clusters(world_engine: GenericWorldEngine):
                 sector_id=sector_id,
                 anchor_row=update_cell.row,
                 anchor_column=update_cell.col,
-                workflow_id=f"{sector_id}::supervisor-fanout",
                 updated_cell=update_cell,
                 error=None,
             )

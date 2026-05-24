@@ -80,6 +80,3 @@ class ClusterAgentState(TracedState):
     evaluated: Annotated[dict, operator.or_] = Field(default_factory=dict)
     briefing: Annotated[dict, operator.or_] = Field(default_factory=dict)
     scenario: Annotated[dict, operator.or_] = Field(default_factory=dict)
-
-    # ── Legacy ─────────────────────────────────────────────────
-    workflow_id: str  # todo is this a Correlation ID

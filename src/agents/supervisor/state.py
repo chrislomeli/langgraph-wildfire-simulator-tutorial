@@ -34,7 +34,6 @@ Node responsibilities
 from __future__ import annotations
 
 import operator
-import uuid
 from typing import Annotated, NewType
 
 from langchain_core.messages import BaseMessage
@@ -61,9 +60,6 @@ class SupervisorState(TracedState):
 
     One execution = one batch of CollatedRecords from the orchestrator.
     """
-
-    # ── Identity ─────────────────────────────────────────────────────
-    workflow_id: str = Field(default_factory=lambda: str(uuid.uuid4()))   # todo - this is not being used to track any flow
 
     # ── Input ────────────────────────────────────────────────────────
     updates: list[UpdatedCell] = Field(default_factory=list)

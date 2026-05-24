@@ -35,7 +35,7 @@ def route_base(state: Any, *, next_node: str, on_completion: str = END) -> str:
     Parameters
     ----------
     state:         Pydantic BaseModel with .status and optionally .error
-                   and an identifier field (sector_id, workflow_id, or session_id).
+                   and an identifier field (sector_id or session_id).
     next_node:     Node to route to when status is still in-progress.
     on_completion: Node to route to when status is COMPLETED (default: END).
     """
@@ -44,7 +44,6 @@ def route_base(state: Any, *, next_node: str, on_completion: str = END) -> str:
     if status == StatusValue.ERROR:
         agent_id = (
             getattr(state, "sector_id", None)
-            or getattr(state, "workflow_id", None)
             or getattr(state, "session_id", None)
             or "unknown"
         )
