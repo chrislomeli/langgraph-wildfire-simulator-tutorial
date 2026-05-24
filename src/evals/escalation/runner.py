@@ -46,9 +46,7 @@ def make_real_classifier(prompt_registry, llm) -> Classifier:
             {"sector_id": sector_id, "max_rows": max_rows, "max_columns": max_columns},
         )
         human_prompt = json.dumps([c.model_dump(mode="json") for c in cells], indent=2)
-        out = await structured.ainvoke(
-            [SystemMessage(system_prompt), HumanMessage(human_prompt)]
-        )
+        out = await structured.ainvoke([SystemMessage(system_prompt), HumanMessage(human_prompt)])
         parsed: Escalation | None = out.get("parsed")
         raw = out.get("raw")
         usage = getattr(raw, "usage_metadata", None) or {}
@@ -114,9 +112,7 @@ class ScenarioResult:
     def keywords_ok(self) -> bool | None:
         if not self.scenario.expect_keywords:
             return None
-        haystack = " ".join(
-            f.lower() for e in self.valid for f in e.contributing_factors
-        )
+        haystack = " ".join(f.lower() for e in self.valid for f in e.contributing_factors)
         return all(kw.lower() in haystack for kw in self.scenario.expect_keywords)
 
     @property
@@ -135,7 +131,9 @@ class ScenarioResult:
         return round(mean(self.latencies_ms)) if self.latencies_ms else 0
 
 
-async def run(scenarios: list[Scenario], classify: Classifier, repeats: int = 3) -> list[ScenarioResult]:
+async def run(
+    scenarios: list[Scenario], classify: Classifier, repeats: int = 3
+) -> list[ScenarioResult]:
     results: list[ScenarioResult] = []
     for s in scenarios:
         escalations: list[Escalation | None] = []

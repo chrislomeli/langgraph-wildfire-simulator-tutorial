@@ -32,14 +32,9 @@ def make_get_sectors(world_engine: GenericWorldEngine):
     """Factory: closes over the world engine so the LLM only sees the query parameters."""
 
     @tool
-    def get_get_sectors(
-       cells: list[tuple[int, int]]
-    ) -> list[str]:
-        """Get the cells requested from the caller
-        """
-        print(
-            f"\n{Colors.TEAL}● TOOL get_get_sectors ={cells} {Colors.RESET}"
-        )
+    def get_get_sectors(cells: list[tuple[int, int]]) -> list[str]:
+        """Get the cells requested from the caller"""
+        print(f"\n{Colors.TEAL}● TOOL get_get_sectors ={cells} {Colors.RESET}")
 
         sectors = world_engine.get_sector(cells)
         selected_cells = [

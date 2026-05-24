@@ -148,7 +148,6 @@ class GenericWorldEngine(Generic[C]):
         self._tick: int = 0
         self.start_date = date.today()
 
-
         # History of ground truth snapshots, one per tick.
         self.history: list[GenericGroundTruthSnapshot] = []
 
@@ -196,22 +195,17 @@ class GenericWorldEngine(Generic[C]):
         try:
             return self.grid.get_cell(row, col, layer)
         except Exception:
-            return  None
-
+            return None
 
     def get_sector(self, cells: list[tuple[int, int]]):
-        sector = [
-            cell
-            for row, col in cells
-            if (cell:=self.get_cell(row, col, 0))
-        ]
+        sector = [cell for row, col in cells if (cell := self.get_cell(row, col, 0))]
         return sector
 
     def expand_sectors(
         self,
         centers: list[tuple[int, int]],
         radius: int = 1,
-    ) -> dict[tuple[int, int], list[tuple[int, int]]] :
+    ) -> dict[tuple[int, int], list[tuple[int, int]]]:
         """Expand changed-cell coordinates into merged, in-bounds sectors.
 
         Each center grows into a (2*radius+1) square halo clamped to the grid.
@@ -336,7 +330,12 @@ class GenericWorldEngine(Generic[C]):
         for direction in directions:
             risks = buckets.get(direction, [])
             if not risks:
-                summary[direction] = {"cell_count": 0, "avg_risk": 0.0, "max_risk": 0.0, "risk_level": "MINIMAL"}
+                summary[direction] = {
+                    "cell_count": 0,
+                    "avg_risk": 0.0,
+                    "max_risk": 0.0,
+                    "risk_level": "MINIMAL",
+                }
             else:
                 avg = round(sum(risks) / len(risks), 3)
                 mx = round(max(risks), 3)
@@ -345,7 +344,9 @@ class GenericWorldEngine(Generic[C]):
                 risk_level = avg_label if avg_label == max_label else f"{avg_label}-{max_label}"
                 summary[direction] = {
                     "cell_count": len(risks),
-                    "avg_risk": avg, "max_risk": mx, "risk_level": risk_level,
+                    "avg_risk": avg,
+                    "max_risk": mx,
+                    "risk_level": risk_level,
                 }
         return summary
 
@@ -383,7 +384,9 @@ class GenericWorldEngine(Generic[C]):
         seg = max(applicable, key=lambda s: s.start_tick)
         return GenericWorldEngine._interpolate_segment(seg, tick, baseline)
 
-    def calculate_forecast(self, fire_cell, plan: list, starting_tick: int = 0, periods: int = 10) -> dict:
+    def calculate_forecast(
+        self, fire_cell, plan: list, starting_tick: int = 0, periods: int = 10
+    ) -> dict:
         """
         Build a NWS-style weather forecast by applying scripted plan segments to a cell baseline.
 
@@ -395,6 +398,7 @@ class GenericWorldEngine(Generic[C]):
         compass label. precipitation (0–1) is expressed as a 0–100 percent.
         """
         from datetime import date, timedelta
+
         today = date.today()
 
         forecast_periods = []
@@ -404,25 +408,33 @@ class GenericWorldEngine(Generic[C]):
 
             temp = self._resolve_metric("temperature_c", tick, plan, fire_cell.temperature_c)
             precip = self._resolve_metric("precipitation", tick, plan, fire_cell.precipitation)
-            wind_speed = self._resolve_metric("wind_speed_mps", tick, plan, fire_cell.wind_speed_mps)
-            wind_dir = self._resolve_metric("wind_direction_deg", tick, plan, fire_cell.wind_direction_deg)
+            wind_speed = self._resolve_metric(
+                "wind_speed_mps", tick, plan, fire_cell.wind_speed_mps
+            )
+            wind_dir = self._resolve_metric(
+                "wind_direction_deg", tick, plan, fire_cell.wind_direction_deg
+            )
             humidity = self._resolve_metric("humidity_pct", tick, plan, fire_cell.humidity_pct)
-            fuel_moisture = self._resolve_metric("fuel_moisture", tick, plan, fire_cell.fuel_moisture)
+            fuel_moisture = self._resolve_metric(
+                "fuel_moisture", tick, plan, fire_cell.fuel_moisture
+            )
 
-            forecast_periods.append({
-                "number": i + 1,
-                "date": day.isoformat(),
-                "temperature": round(temp, 1),
-                "temperatureUnit": "C",
-                "probabilityOfPrecipitation": {
-                    "unitCode": "wmoUnit:percent",
-                    "value": round(precip * 100, 1),
-                },
-                "windSpeed": f"{round(wind_speed * 2.237)} mph",
-                "windDirection": self.degrees_to_compass(wind_dir),
-                "humidity_pct": round(humidity, 1),
-                "fuel_moisture": round(fuel_moisture, 3),
-            })
+            forecast_periods.append(
+                {
+                    "number": i + 1,
+                    "date": day.isoformat(),
+                    "temperature": round(temp, 1),
+                    "temperatureUnit": "C",
+                    "probabilityOfPrecipitation": {
+                        "unitCode": "wmoUnit:percent",
+                        "value": round(precip * 100, 1),
+                    },
+                    "windSpeed": f"{round(wind_speed * 2.237)} mph",
+                    "windDirection": self.degrees_to_compass(wind_dir),
+                    "humidity_pct": round(humidity, 1),
+                    "fuel_moisture": round(fuel_moisture, 3),
+                }
+            )
 
         return {
             "units": "us",
@@ -430,7 +442,6 @@ class GenericWorldEngine(Generic[C]):
             "generatedAt": date.today().isoformat(),
             "periods": forecast_periods,
         }
-
 
     def calculate_history(self, fire_cell, plan: list) -> dict:
         """
@@ -446,7 +457,7 @@ class GenericWorldEngine(Generic[C]):
         history_periods = []
         simulation_date = self.start_date + timedelta(days=self.current_tick)
 
-        for count_down in range(periods,0,-1):
+        for count_down in range(periods, 0, -1):
             historical_date = simulation_date - timedelta(days=count_down)
             t = self.current_tick - count_down
             plan_tick = max(0, t)
@@ -455,23 +466,31 @@ class GenericWorldEngine(Generic[C]):
             # in that case we use the first valid tick and repeat it
             temp = self._resolve_metric("temperature_c", plan_tick, plan, fire_cell.temperature_c)
             precip = self._resolve_metric("precipitation", plan_tick, plan, fire_cell.precipitation)
-            wind_speed = self._resolve_metric("wind_speed_mps", plan_tick, plan, fire_cell.wind_speed_mps)
-            wind_dir = self._resolve_metric("wind_direction_deg", plan_tick, plan, fire_cell.wind_direction_deg)
+            wind_speed = self._resolve_metric(
+                "wind_speed_mps", plan_tick, plan, fire_cell.wind_speed_mps
+            )
+            wind_dir = self._resolve_metric(
+                "wind_direction_deg", plan_tick, plan, fire_cell.wind_direction_deg
+            )
             humidity = self._resolve_metric("humidity_pct", plan_tick, plan, fire_cell.humidity_pct)
-            fuel_moisture = self._resolve_metric("fuel_moisture", plan_tick, plan, fire_cell.fuel_moisture)
-            rain = f"{precip * .15} inches  per hour " if precip > .5 else "no rain"
+            fuel_moisture = self._resolve_metric(
+                "fuel_moisture", plan_tick, plan, fire_cell.fuel_moisture
+            )
+            rain = f"{precip * 0.15} inches  per hour " if precip > 0.5 else "no rain"
 
-            history_periods.append({
-                "number": t,
-                "date": historical_date.isoformat(),
-                "temperature": round(temp, 1),
-                "temperatureUnit": "C",
-                "precipitation": rain,
-                "windSpeed": f"{round(wind_speed * 2.237)} mph",
-                "windDirection": self.degrees_to_compass(wind_dir),
-                "humidity_pct": round(humidity, 1),
-                "fuel_moisture": round(fuel_moisture, 3),
-            })
+            history_periods.append(
+                {
+                    "number": t,
+                    "date": historical_date.isoformat(),
+                    "temperature": round(temp, 1),
+                    "temperatureUnit": "C",
+                    "precipitation": rain,
+                    "windSpeed": f"{round(wind_speed * 2.237)} mph",
+                    "windDirection": self.degrees_to_compass(wind_dir),
+                    "humidity_pct": round(humidity, 1),
+                    "fuel_moisture": round(fuel_moisture, 3),
+                }
+            )
 
         return {
             "units": "us",
@@ -491,12 +510,18 @@ class GenericWorldEngine(Generic[C]):
         if the cell isn't on the grid.
         """
         cell = self.get_cell(row, col, layer)
-        return cell.cell_state if cell is not None else self.physics.initial_cell_state(row, col, layer)
+        return (
+            cell.cell_state
+            if cell is not None
+            else self.physics.initial_cell_state(row, col, layer)
+        )
 
     def create_forecast(self, row: int, col: int) -> dict:
         fire_cell = self._baseline_cell(row, col)
         plan = self.physics.get_plan(row, col)
-        return self.calculate_forecast(fire_cell=fire_cell, plan=plan, starting_tick=self.current_tick)
+        return self.calculate_forecast(
+            fire_cell=fire_cell, plan=plan, starting_tick=self.current_tick
+        )
 
     def create_history(self, row: int, col: int) -> dict:
         fire_cell = self._baseline_cell(row, col)
@@ -508,10 +533,10 @@ class GenericWorldEngine(Generic[C]):
         plan = self.physics.get_plan(row, col)
         return {
             "history": self.calculate_history(fire_cell=fire_cell, plan=plan),
-            "forecast": self.calculate_forecast(fire_cell=fire_cell, plan=plan, starting_tick=self.current_tick + 1),
+            "forecast": self.calculate_forecast(
+                fire_cell=fire_cell, plan=plan, starting_tick=self.current_tick + 1
+            ),
         }
-
-
 
     def tick(self) -> GenericGroundTruthSnapshot:
         """
@@ -606,8 +631,6 @@ class GenericWorldEngine(Generic[C]):
         if 0 <= tick < len(self.history):
             return self.history[tick]
         return None
-
-
 
     def inject_state(self, row: int, col: int, state: C, layer: int = 0) -> None:
         """

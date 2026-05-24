@@ -129,7 +129,6 @@ class PhysicsModule(ABC, Generic[C]):
         """
         ...
 
-
     @abstractmethod
     def tick_physics(
         self,

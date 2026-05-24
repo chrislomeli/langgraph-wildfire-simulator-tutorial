@@ -22,9 +22,7 @@ class ScenarioPlanRepository(ScenarioPlanRepositoryBase):
     def __init__(self, pg_gateway: PgGateway):
         self._pg = pg_gateway
 
-    def fetch_plan(
-        self, region_name: str
-    ) -> dict[tuple[int, int, int], list[ScenarioPlanSegment]]:
+    def fetch_plan(self, region_name: str) -> dict[tuple[int, int, int], list[ScenarioPlanSegment]]:
         sql = """
         select region,
                grid_row,

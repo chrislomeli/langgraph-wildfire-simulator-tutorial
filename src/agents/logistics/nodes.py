@@ -220,9 +220,7 @@ def make_sector_analysis_node(
                     world, row, col, dr, dc, max_cells, cell_size_ft
                 )
                 sectors.append(
-                    analyze_sector(
-                        sector_name, sector_cells, stop_reason, wind_dir, cell_size_ft
-                    )
+                    analyze_sector(sector_name, sector_cells, stop_reason, wind_dir, cell_size_ft)
                 )
 
             hotspot = HotspotSectors(
@@ -246,15 +244,17 @@ def make_sector_analysis_node(
             context_parts.append("")
 
             logger.info(
-                "Hotspot at (%d, %d): ignition_risk=%d, 8 sectors traced, "
-                "max_burnable=%.1f miles",
-                row, col, esc.ignition_risk,
+                "Hotspot at (%d, %d): ignition_risk=%d, 8 sectors traced, max_burnable=%.1f miles",
+                row,
+                col,
+                esc.ignition_risk,
                 max(s.burnable_miles for s in sectors),
             )
 
         logger.info(
             "sector_analysis complete: %d hotspot(s), %d total sectors",
-            len(hotspots), len(hotspots) * 8,
+            len(hotspots),
+            len(hotspots) * 8,
         )
 
         return {
@@ -269,7 +269,9 @@ def make_sector_analysis_node(
 # ── Node: logistics_agent ─────────────────────────────────────────────────────
 
 
-def make_logistics_agent_node(tools: list, prompt_registry: PromptRegistry, llm_registry: LLMRegistry | None):
+def make_logistics_agent_node(
+    tools: list, prompt_registry: PromptRegistry, llm_registry: LLMRegistry | None
+):
     """Factory: binds tools to the LLM for the ReAct loop (Phase 1).
 
     Phase 1 is tool-calling ONLY. We deliberately do NOT chain
@@ -409,8 +411,7 @@ def route_after_logistics_agent(state: LogisticsAgentState) -> str:
     last = state.messages[-1]
     if getattr(last, "tool_calls", None):
         tool_call_rounds = sum(
-            1 for m in state.messages
-            if isinstance(m, AIMessage) and getattr(m, "tool_calls", None)
+            1 for m in state.messages if isinstance(m, AIMessage) and getattr(m, "tool_calls", None)
         )
         if tool_call_rounds >= MAX_LOGISTICS_ITERATIONS:
             logger.warning(
@@ -492,7 +493,9 @@ def make_extract_plan_node(
             llm = llm_registry.get("logistics_extract")
             structured_llm = llm.with_structured_output(LogisticsAssessment)
         except KeyError:
-            logger.warning("No 'logistics_extract' LLM registered — extract_plan will pass through.")
+            logger.warning(
+                "No 'logistics_extract' LLM registered — extract_plan will pass through."
+            )
 
     @node_executor("extract_plan")
     def extract_plan(state: LogisticsAgentState) -> dict:

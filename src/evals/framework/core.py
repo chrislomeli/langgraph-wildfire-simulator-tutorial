@@ -29,8 +29,8 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any, Generic, Protocol, TypeVar
 
-Input = TypeVar("Input")       # what the system under test consumes
-Output = TypeVar("Output")     # what it produces (e.g. an Escalation)
+Input = TypeVar("Input")  # what the system under test consumes
+Output = TypeVar("Output")  # what it produces (e.g. an Escalation)
 Expected = TypeVar("Expected")  # the golden expectation for a case
 
 
@@ -285,9 +285,7 @@ async def run_eval(
     for agg in aggregators:
         metrics.update(agg.aggregate(scores_by_case))
 
-    report = Report(
-        run_id=run_id, metrics=metrics, passed_cases=passed, total_cases=len(cases)
-    )
+    report = Report(run_id=run_id, metrics=metrics, passed_cases=passed, total_cases=len(cases))
     if baseline is not None:
         report.regressions = detect_regressions(report, baseline)
     store.finish_run(run_id, report)

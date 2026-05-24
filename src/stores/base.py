@@ -51,9 +51,7 @@ class CellStateRepository(ABC):
         ...
 
     @abstractmethod
-    def write_state(
-        self, region: str, version: str, snapshots: list[CellStateSnapshot]
-    ) -> int:
+    def write_state(self, region: str, version: str, snapshots: list[CellStateSnapshot]) -> int:
         """UPDATE the working-copy rows to match the snapshots' current state.
 
         `cell_state` has one row per (version, grid_row, grid_column, layer,

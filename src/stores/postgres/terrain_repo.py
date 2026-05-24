@@ -32,7 +32,7 @@ class TerrainRepository(TerrainRepositoryBase):
     def fetch_terrain(
         self,
         region_name: str,
-        version: str = 'seed',
+        version: str = "seed",
         limit: int | None = None,
     ) -> tuple[dict[tuple[int, int, int], Terrain], TerrainConfig]:
         """Load terrain cells for a region.
@@ -132,7 +132,6 @@ class TerrainRepository(TerrainRepositoryBase):
         """
         terrain_type = _TERRAIN_MAP.get(terrain.terrain or "FOREST", TerrainType.FOREST)
 
-
         return FireCellState(
             terrain_type=terrain_type,
             terrain_code=TerrainCode(terrain.terrain_code),
@@ -149,4 +148,3 @@ class TerrainRepository(TerrainRepositoryBase):
             else 0.0,
             pressure_hpa=terrain.pressure_hpa if terrain.pressure_hpa is not None else 1013.0,
         )
-

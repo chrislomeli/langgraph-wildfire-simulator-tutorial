@@ -76,7 +76,7 @@ HEURISTIC_EVALUATE_THRESHOLD = 3
 
 # ── Node: update world ────────────────────────────────────────────────────────
 def make_apply_thresholds(
-        world_engine: GenericWorldEngine,
+    world_engine: GenericWorldEngine,
 ):
     """Factory for the apply_thresholds LangGraph node.
 
@@ -110,12 +110,12 @@ def make_apply_thresholds(
         heuristic = round(sum(factors) / len(factors) * 10)
         if heuristic >= HEURISTIC_EVALUATE_THRESHOLD:
             selected_cell = EvaluationCell(
-                    row=updated_cell.row,
-                    col=updated_cell.col,
-                    layer=updated_cell.layer,
-                    state=updated_cell.cell_state,
-                    attributes=updated_cell.attributes,
-                )
+                row=updated_cell.row,
+                col=updated_cell.col,
+                layer=updated_cell.layer,
+                state=updated_cell.cell_state,
+                attributes=updated_cell.attributes,
+            )
             return {
                 "heuristic_score": round(sum(factors) / len(factors) * 10),
                 "selected_cell": selected_cell,
@@ -127,7 +127,6 @@ def make_apply_thresholds(
                 "status": StatusValue.COMPLETED,
             }
 
-
     return apply_thresholds
 
 
@@ -135,9 +134,9 @@ def make_apply_thresholds(
 
 
 def make_evaluate_node(
-        prompt_registry: PromptRegistry,
-        llm_registry: LLMRegistry,
-        world_engine: GenericWorldEngine,
+    prompt_registry: PromptRegistry,
+    llm_registry: LLMRegistry,
+    world_engine: GenericWorldEngine,
 ):
     """Factory that creates the evaluate node.
 
@@ -217,22 +216,30 @@ def make_evaluate_node(
                 scenario=json.dumps(scenario, indent=2),
                 history=json.dumps(history, indent=2),
                 forecast=json.dumps(forecast, indent=2),
-            )
+            ),
         )
-        human_prompt = f"Readings for ANCHOR cell ({evaluate_cell.row},{evaluate_cell.col})"+evaluate_cell.model_dump_json(indent=2)
+        human_prompt = (
+            f"Readings for ANCHOR cell ({evaluate_cell.row},{evaluate_cell.col})"
+            + evaluate_cell.model_dump_json(indent=2)
+        )
 
         # Split on heuristic score — only call the LLM for cells that have at
         # least one risk factor present. Cells below the threshold are assigned
         # risk_score=0 with high confidence: the heuristic says nothing is there.
         if STUB_RISK_SCORE:
             print(f"""\n{Colors.YELLOW}● CALLING LLM STUB {Colors.RESET}""")
-            evaluation =   Evaluation(
-                    escalate=True,
-                    ignition_risk=5,
-                    potential_spread_area=SpreadRegion(upper_left_corner=Corner(row=row, col=col),  upper_right_corner=Corner(row=row, col=col), lower_left_corner=Corner(row=row, col=col), lower_right_corner=Corner(row=row, col=col)),
-                    confidence=3,
-                    reasoning=["this is a dummy escalation"]
-                )
+            evaluation = Evaluation(
+                escalate=True,
+                ignition_risk=5,
+                potential_spread_area=SpreadRegion(
+                    upper_left_corner=Corner(row=row, col=col),
+                    upper_right_corner=Corner(row=row, col=col),
+                    lower_left_corner=Corner(row=row, col=col),
+                    lower_right_corner=Corner(row=row, col=col),
+                ),
+                confidence=3,
+                reasoning=["this is a dummy escalation"],
+            )
         else:
             print(f"""\n{Colors.BLUE}● CALLING LLM  {Colors.RESET}""")
             llm = llm_registry.get("classifier")
@@ -254,27 +261,30 @@ def make_evaluate_node(
             col=evaluate_cell.col,
             layer=evaluate_cell.layer,
             sector_id=state.sector_id,
-            **evaluation.model_dump()
+            **evaluation.model_dump(),
         )
 
         eval_dict = evaluate_cell.state.model_dump()
 
-
         if escalation.escalate:
-            print(f"""\nPROMOTE:: {Colors.TEAL}{escalation.model_dump_json(indent=2)}{Colors.RESET}""")
+            print(
+                f"""\nPROMOTE:: {Colors.TEAL}{escalation.model_dump_json(indent=2)}{Colors.RESET}"""
+            )
             return {
                 "evaluated": {(row, col, 0): eval_dict},
-                "briefing": {(row,col,layer): briefing},
-                "scenario": {(row,col,layer): scenario},
+                "briefing": {(row, col, layer): briefing},
+                "scenario": {(row, col, layer): scenario},
                 "escalation": escalation,
                 "status": StatusValue.PROCESSING,
             }
         else:
-            print(f"""\n{Colors.YELLOW} DEFER:: {escalation.model_dump_json(indent=2)}{Colors.RESET}""")
+            print(
+                f"""\n{Colors.YELLOW} DEFER:: {escalation.model_dump_json(indent=2)}{Colors.RESET}"""
+            )
             return {
-                "evaluated": {(row, col, 0):  eval_dict},
-                "briefing": {(row,col,layer): briefing},
-                "scenario": {(row,col,layer): scenario},
+                "evaluated": {(row, col, 0): eval_dict},
+                "briefing": {(row, col, layer): briefing},
+                "scenario": {(row, col, layer): scenario},
                 "escalation": escalation,
                 "status": StatusValue.PROCESSING,
             }

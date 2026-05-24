@@ -45,10 +45,9 @@ class TestGenericTerrainGrid:
 
     def test_get_cell_out_of_bounds(self):
         grid = GenericTerrainGrid(rows=3, cols=3, initial_state_factory=make_toy_state)
-        with pytest.raises(IndexError):
-            grid.get_cell(3, 0)
-        with pytest.raises(IndexError):
-            grid.get_cell(-1, 0)
+        # Out-of-bounds returns None — the grid's contract; callers check `is None`.
+        assert grid.get_cell(3, 0) is None
+        assert grid.get_cell(-1, 0) is None
 
     def test_neighbors_corner(self):
         grid = GenericTerrainGrid(rows=5, cols=5, initial_state_factory=make_toy_state)

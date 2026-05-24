@@ -76,11 +76,11 @@ class ClusterAgentState(TracedState):
     updated_cell: UpdatedCell | None = Field(default=None)
     selected_cell: EvaluationCell | None = Field(default=None)
     heuristic_score: int | None = Field(default=None)
-    escalation: Escalation | None  = Field(default=None)
+    escalation: Escalation | None = Field(default=None)
     evaluated: Annotated[dict, operator.or_] = Field(default_factory=dict)
     briefing: Annotated[dict, operator.or_] = Field(default_factory=dict)
     scenario: Annotated[dict, operator.or_] = Field(default_factory=dict)
 
     # ── Legacy ─────────────────────────────────────────────────
-    workflow_id: str
+    workflow_id: str  # todo is this a Correlation ID
     readings: list[CellReadings] = Field(default_factory=list)

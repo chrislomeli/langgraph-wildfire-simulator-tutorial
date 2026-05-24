@@ -171,9 +171,7 @@ def start_world_service(
     time_step_min = terrain_config.time_step_min or _DEFAULT_TIME_STEP_MIN
     burn_duration_ticks = terrain_config.burn_duration_ticks or _DEFAULT_BURN_DURATION_TICKS
     plan = data_store.scenario_plan.fetch_plan(region_name)
-    physics = ScriptedTrendPhysics(
-        plan=plan
-    )
+    physics = ScriptedTrendPhysics(plan=plan)
     # Expose terrain-derived physics constants so consumers reading
     # ``world.cell_size_ft`` via WorldView get the right value.
     physics.cell_size_ft = cell_size_ft

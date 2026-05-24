@@ -92,6 +92,7 @@ class Sensor(BaseModel):
 
 class TerrainState(BaseModel):
     """Model for the terrain table."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     grid_column: int | None = None
@@ -112,6 +113,7 @@ class TerrainState(BaseModel):
 
 class Terrain(TerrainState):
     """Model for the terrain table."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     cell_key: str | None = None
@@ -126,9 +128,9 @@ class Terrain(TerrainState):
     location: str | None = None  # geography(Point, 4326) as WKT string
 
 
-
 class WildfireActivity(BaseModel):
     """Model for the wildfire_activity table."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     imsr_date: date | None = None

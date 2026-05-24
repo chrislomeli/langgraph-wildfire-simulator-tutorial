@@ -1,12 +1,13 @@
 """
 world-simulator.domains.wildfire
 
-Wildfire domain — cell state, physics, fuel models, NWCG resources,
-hardcoded-scenario factories.
+Wildfire domain — cell state, physics, fuel models, NWCG resources.
 
-The scripted plan-driven physics is the production path
-(see [[scripted-trend-driver]]). Rothermel and Simple physics modules
-are retained pending removal in task #6.
+The scripted plan-driven physics (``ScriptedTrendPhysics``) is the production
+path (see [[scripted-trend-driver]]). ``SimpleFirePhysicsModule`` is retained as
+the reference fire-spread model used by the world/engine test suite. The
+Rothermel model and the hardcoded-scenario factories were removed (recoverable
+from git history) as dead code — production builds scenarios from the DB.
 
 Sensors are not part of this package — see [[clean-data-no-sensor-noise]]
 for the architectural decision and [[pod-architecture]] for how the
@@ -25,14 +26,6 @@ from world.domains.wildfire.nwcg_resources import get_by_kind as get_by_kind
 from world.domains.wildfire.nwcg_resources import suppression_category as suppression_category
 from world.domains.wildfire.physics import FirePhysicsModule as FirePhysicsModule
 from world.domains.wildfire.physics import SimpleFirePhysicsModule as SimpleFirePhysicsModule
-from world.domains.wildfire.rothermel_physics import (
-    RothermelFirePhysicsModule as RothermelFirePhysicsModule,
-)
-from world.domains.wildfire.scenarios import create_basic_wildfire as create_basic_wildfire
-from world.domains.wildfire.scenarios import (
-    create_full_wildfire_scenario as create_full_wildfire_scenario,
-)
-from world.domains.wildfire.scenarios import create_wildfire_resources as create_wildfire_resources
 from world.domains.wildfire.scripted_trend_physics import (
     ScriptedTrendPhysics as ScriptedTrendPhysics,
 )
@@ -47,7 +40,6 @@ __all__ = [
     # Physics
     "FirePhysicsModule",
     "SimpleFirePhysicsModule",
-    "RothermelFirePhysicsModule",
     "ScriptedTrendPhysics",
     # Fuel models
     "FuelModel",
@@ -57,8 +49,4 @@ __all__ = [
     "get_by_id",
     "get_by_kind",
     "suppression_category",
-    # Scenario factories (hardcoded; kept for tests)
-    "create_basic_wildfire",
-    "create_wildfire_resources",
-    "create_full_wildfire_scenario",
 ]

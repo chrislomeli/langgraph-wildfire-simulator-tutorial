@@ -82,7 +82,9 @@ async def main() -> None:
     # The evaluators: same generic strategies, just wired to FakeOutput's fields.
     evaluators = [
         BooleanVote("escalate", predict=lambda o: o.escalate, expected=lambda x: x.escalate),
-        NumericTolerance("risk", predict=lambda o: o.risk, expected=lambda x: x.risk, tolerance=2.0),
+        NumericTolerance(
+            "risk", predict=lambda o: o.risk, expected=lambda x: x.risk, tolerance=2.0
+        ),
     ]
     aggregators = [PassRate("escalate"), PassRate("risk"), MeanValue("risk_mae")]
 
@@ -98,7 +100,6 @@ async def main() -> None:
     )
     print("=== RUN 1 (baseline) ===")
     print(render_scorecard(good))
-
 
     # Run 2 — a worse model, compared against run 1 as the baseline.
     worse: Report = await run_eval(

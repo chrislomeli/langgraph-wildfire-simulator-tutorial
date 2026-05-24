@@ -113,12 +113,10 @@ class TestFireGrid:
         assert isinstance(cell.cell_state, FireCellState)
 
     def test_get_cell_out_of_bounds(self, small_fire_grid):
-        with pytest.raises(IndexError):
-            small_fire_grid.get_cell(5, 0)
-        with pytest.raises(IndexError):
-            small_fire_grid.get_cell(0, 5)
-        with pytest.raises(IndexError):
-            small_fire_grid.get_cell(-1, 0)
+        # Out-of-bounds returns None — the grid's contract; callers check `is None`.
+        assert small_fire_grid.get_cell(5, 0) is None
+        assert small_fire_grid.get_cell(0, 5) is None
+        assert small_fire_grid.get_cell(-1, 0) is None
 
     def test_neighbors_center(self, small_fire_grid):
         assert len(small_fire_grid.neighbors(2, 2)) == 8

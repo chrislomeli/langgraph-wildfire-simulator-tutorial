@@ -50,6 +50,9 @@ class HeatPhysics(PhysicsModule[HeatCellState]):
     def initial_cell_state(self, row: int, col: int, layer: int = 0) -> HeatCellState:
         return HeatCellState(temperature=0.0)
 
+    def get_plan(self, row: int, col: int, layer: int = 0) -> list:
+        return []  # toy physics has no scripted weather plan
+
     def tick_physics(
         self,
         grid: GenericTerrainGrid[HeatCellState],

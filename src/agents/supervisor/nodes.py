@@ -187,16 +187,17 @@ def make_dispatch_commands(store: BaseStore | None = None):
 
     @node_executor("dispatch_commands")
     def dispatch_commands(state: SupervisorState) -> dict:
-        commands = state.pending_commands
-        logger.info("Supervisor dispatching %d command(s)", len(commands))
+       # todo - put something meaningful here or remove it
+       # commands = state.pending_commands
+       # logger.info("Supervisor dispatching %d command(s)", len(commands))
 
-        print("\nDISPATCH FINAL FINDINGS")
-        print("Cluster risk scores (0–10)")
-        for key, value in state.cluster_score.items():
-            print(f"{key}: risk_score: {value.risk_score}, confidence: {value.confidence}")
-        if state.logistics_plan:
-            print("\nLOGISTICS PLAN")
-            print(state.logistics_plan)
+        print("\nDISPATCH FINAL FINDINGS - STUB")
+        # print("Cluster risk scores (0–10)")
+        # for key, value in state.cluster_score.items():
+        #     print(f"{key}: risk_score: {value.risk_score}, confidence: {value.confidence}")
+        # if state.logistics_plan:
+        #     print("\nLOGISTICS PLAN")
+        #     print(state.logistics_plan)
         return {"status": StatusValue.COMPLETED}
 
     return dispatch_commands
@@ -207,6 +208,7 @@ def make_dispatch_commands(store: BaseStore | None = None):
 # Must match the risk_threshold passed to make_sector_analysis_node.
 # If sector_analysis won't find a hotspot, there's nothing for logistics to do.
 LOGISTICS_RISK_THRESHOLD = 5
+
 
 def route_after_assess(state: SupervisorState) -> str:
     """Conditional edge after assess_situation.

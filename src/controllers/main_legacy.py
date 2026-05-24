@@ -56,6 +56,7 @@ from world.domains.wildfire.scenario_loader import load_scenario_from_db  # noqa
 SMOKE_TICKS = 1
 SMOKE_TICK_INTERVAL_SEC = 0.05
 
+
 def build_agent_deps(
     engine: GenericWorldEngine,
     cell_state_manager: CellStateManager,
@@ -93,7 +94,7 @@ async def run_orchestrator(engine, sensor_inventory, cell_state_manager, agent_d
         cell_state_manager=cell_state_manager,
         sampler=sample_local_conditions,
         tick_interval_seconds=SMOKE_TICK_INTERVAL_SEC,
-        location_count=1
+        location_count=1,
     )
 
     print()
@@ -112,7 +113,9 @@ async def run_orchestrator(engine, sensor_inventory, cell_state_manager, agent_d
     if stats.cluster_score:
         print("  Cluster risk scores (0–10):")
         for cluster, score in sorted(stats.cluster_score.items()):
-            print(f"    {cluster:24s}  score: {score.risk_score:2d},  confidence: {score.confidence:2d}")
+            print(
+                f"    {cluster:24s}  score: {score.risk_score:2d},  confidence: {score.confidence:2d}"
+            )
 
 
 def main() -> None:
@@ -125,7 +128,9 @@ def main() -> None:
         )
 
         agent_dependencies = build_agent_deps(engine, cell_state_manager, data_store=data_store)
-        asyncio.run(run_orchestrator(engine, sensor_inventory, cell_state_manager, agent_dependencies))
+        asyncio.run(
+            run_orchestrator(engine, sensor_inventory, cell_state_manager, agent_dependencies)
+        )
     finally:
         data_store.close()
 

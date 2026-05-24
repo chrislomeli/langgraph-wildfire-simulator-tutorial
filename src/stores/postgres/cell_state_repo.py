@@ -94,9 +94,7 @@ class CellStateRepository(CellStateRepositoryBase):
         )
         return inserted
 
-    def write_state(
-        self, region: str, version: str, snapshots: list[CellStateSnapshot]
-    ) -> int:
+    def write_state(self, region: str, version: str, snapshots: list[CellStateSnapshot]) -> int:
         if version == "seed":
             raise ValueError("Refusing to write state onto the 'seed' group.")
         if not snapshots:

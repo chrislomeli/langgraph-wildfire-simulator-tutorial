@@ -95,13 +95,11 @@ class GenericTerrainGrid(Generic[C]):
         ]
         self.layers = layers
 
-
-
     def get_cell(self, row: int, col: int, layer: int = 0) -> GenericCell[C] | None:
         """
         Return the GenericCell at (row, col, layer).
 
-        Raises IndexError if out of bounds.
+        Returns None if out of bounds (callers check ``is None``).
         """
         if not (0 <= row < self.rows and 0 <= col < self.cols and 0 <= layer < self.layers):
             return None

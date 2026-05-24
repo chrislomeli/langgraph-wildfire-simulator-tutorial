@@ -124,34 +124,33 @@ class SupervisorState(TracedState):
     """
 
     # ── Identity ─────────────────────────────────────────────────────
-    workflow_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    workflow_id: str = Field(default_factory=lambda: str(uuid.uuid4()))   # todo - this is not being used to track any flow
 
     # ── Input ────────────────────────────────────────────────────────
     updates: list[UpdatedCell] = Field(default_factory=list)
-    escalations:  Annotated[list[Escalation], operator.add] = Field(default_factory=list)
+    escalations: Annotated[list[Escalation], operator.add] = Field(default_factory=list)
     briefings: Annotated[dict, operator.or_] = Field(default_factory=dict)
     scenarios: Annotated[dict, operator.or_] = Field(default_factory=dict)
     evaluated: Annotated[dict, operator.or_] = Field(default_factory=dict)
 
-    # ── Input Legacy────────────────────────────────────────────────────────
-    clusters: dict[str, list[CellReadings]] = Field(default_factory=dict)
-
+    # # ── Input Legacy────────────────────────────────────────────────────────
+    # clusters: dict[str, list[CellReadings]] = Field(default_factory=dict)
 
     # ── Aggregated output of cluster fan-out ─────────────────────────
-    cluster_score: Annotated[dict[str, RiskScore], max_cluster_score] = Field(default_factory=dict)
+    # cluster_score: Annotated[dict[str, RiskScore], max_cluster_score] = Field(default_factory=dict)
 
-    cluster_findings: Annotated[dict[str, list[CollatedRecordRisk]], merge_cluster_findings] = (
-        Field(default_factory=dict)
-    )
+    # cluster_findings: Annotated[dict[str, list[CollatedRecordRisk]], merge_cluster_findings] = (
+    #     Field(default_factory=dict)
+    # )
 
     # ── LLM reasoning (reserved for when the LLM is wired in) ────────
     messages: Annotated[list[BaseMessage], add_messages] = Field(default_factory=list)
 
     # ── Decision output ──────────────────────────────────────────────
-    pending_commands: list[ActuatorCommand] = Field(default_factory=list)
+    # pending_commands: list[ActuatorCommand] = Field(default_factory=list)
 
     # ── Situation summary ────────────────────────────────────────────
     situation_summary: str | None = None
 
     # ── Logistics plan (written by run_logistics_agent node) ─────────
-    logistics_plan: str | None = None
+    # logistics_plan: str | None = None

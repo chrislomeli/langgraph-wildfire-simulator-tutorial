@@ -180,7 +180,7 @@ class FireCellState(CellState):
             "terrain_type": self.terrain_type.value,
             "fire_state": self.fire_state.value,
             "fire_intensity": self.fire_intensity,
-            "precipitation" : self.precipitation,
+            "precipitation": self.precipitation,
         }
 
     def summary_label(self) -> str:

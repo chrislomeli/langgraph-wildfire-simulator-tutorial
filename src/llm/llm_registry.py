@@ -156,8 +156,8 @@ models: dict[LLMLabel, LLMModel | None] = {
 # code — see make_extract_plan_node. They point at the same label for now.
 
 LLM_ROLE_CONFIG: dict[str, LLMLabel] = {
-    "classifier": LLMLabel.GPT_MINI,        # fast sensor pattern recognition
-    "logistics": LLMLabel.GPT_MINI,         # ReAct tool-calling loop
+    "classifier": LLMLabel.GPT_MINI,  # fast sensor pattern recognition
+    "logistics": LLMLabel.GPT_MINI,  # ReAct tool-calling loop
     "logistics_extract": LLMLabel.GPT_MINI,  # transcript → LogisticsAssessment
 }
 

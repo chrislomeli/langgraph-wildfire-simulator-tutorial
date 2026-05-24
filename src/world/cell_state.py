@@ -100,14 +100,13 @@ class GenericCell(Generic[C]):
         col: int,
         cell_state: C,
         layer: int = 0,
-        attributes: dict[str, Any] | None = None
+        attributes: dict[str, Any] | None = None,
     ) -> None:
         self.row = row
         self.col = col
         self.layer = layer
         self.cell_state = cell_state
         self.attributes = attributes or {}
-
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise for snapshots and logging."""

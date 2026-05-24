@@ -43,27 +43,27 @@ class LogisticsAssessment(BaseModel):
     needed; a non-empty list signals that upstream logic should widen the
     search, retry, or escalate to a human.
     """
+
     observations: list[str] = Field(
         description="Factual findings from the sector analysis and tool results. "
-                    "One item per distinct finding — do not include inferences here."
+        "One item per distinct finding — do not include inferences here."
     )
     data_gaps: list[str] = Field(
         description="Specific inputs that were missing or unavailable. "
-                    "Name the gap concretely: 'No available resources found within "
-                    "30 miles of hotspot (2,3)' not 'resource data was limited'."
+        "Name the gap concretely: 'No available resources found within "
+        "30 miles of hotspot (2,3)' not 'resource data was limited'."
     )
     assessment: str = Field(
         description="Reasoning from observations to conclusion. "
-                    "Explain what the data implied and how you weighted it."
+        "Explain what the data implied and how you weighted it."
     )
     advisory_rationale: Annotated[str, Field(min_length=10)] = Field(
         description="Explain why a ResourceAdvisory was or was not warranted. Minimum 10 characters."
     )
     advisory: ResourceAdvisory | None = Field(
         default=None,
-        description="Populate with a ResourceAdvisory if conditions warrant one; leave null otherwise."
+        description="Populate with a ResourceAdvisory if conditions warrant one; leave null otherwise.",
     )
-
 
 
 class LogisticsAgentState(TracedState):
@@ -73,7 +73,7 @@ class LogisticsAgentState(TracedState):
     The agent reads heatmap + resources via tools and writes logistics_plan.
     """
 
-    workflow_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    workflow_id: str = Field(default_factory=lambda: str(uuid.uuid4()))  #  todo - if this is supposed to be a Correlation ID value - it's not being used that way?
 
     # ── Input (populated by supervisor before invoking this graph) ────────────
     situation_summary: str = ""

@@ -77,17 +77,19 @@ def build_logistics_agent_graph(*, agent_deps: AgentDependencies) -> LogisticsGr
     builder.add_node(
         "sector_analysis",
         make_sector_analysis_node(
-            world=agent_deps.world_engine,
-            risk_threshold=5,
-            max_sector_miles=20.0
-        )
+            world=agent_deps.world_engine, risk_threshold=5, max_sector_miles=20.0
+        ),
     )
-    builder.add_node("logistics_agent",
-                     make_logistics_agent_node(tools, agent_deps.prompt_registry, agent_deps.llm_registry))
+    builder.add_node(
+        "logistics_agent",
+        make_logistics_agent_node(tools, agent_deps.prompt_registry, agent_deps.llm_registry),
+    )
     builder.add_node("tools", ToolNode(tools))
     advisory_repo = agent_deps.data_store.advisories if agent_deps.data_store is not None else None
-    builder.add_node("extract_plan",
-                     make_extract_plan_node(agent_deps.prompt_registry, agent_deps.llm_registry, advisory_repo))
+    builder.add_node(
+        "extract_plan",
+        make_extract_plan_node(agent_deps.prompt_registry, agent_deps.llm_registry, advisory_repo),
+    )
 
     builder.add_edge(START, "sector_analysis")
     builder.add_edge("sector_analysis", "logistics_agent")
@@ -108,7 +110,11 @@ def _build_tools(agent_deps: AgentDependencies) -> list:
 
     if agent_deps.data_store is not None:
         tools.append(make_get_wildfire_activity(agent_deps.data_store.wildfires))
-        tools.append(make_get_resources_within(agent_deps.data_store.terrain, agent_deps.data_store.resources))
+        tools.append(
+            make_get_resources_within(
+                agent_deps.data_store.terrain, agent_deps.data_store.resources
+            )
+        )
     else:
         logger.warning("pg_gateway not available — resource and wildfire tools skipped")
 

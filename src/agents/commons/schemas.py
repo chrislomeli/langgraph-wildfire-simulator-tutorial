@@ -116,8 +116,8 @@ class Metric(BaseModel):
         ge=0.0,
         le=1.0,
         description="Combined reliability: sensor confidence × distance decay. "
-                    "1.0 = sensor is at this cell with full health. "
-                    "0.0 = reading is unreliable for this cell.",
+        "1.0 = sensor is at this cell with full health. "
+        "0.0 = reading is unreliable for this cell.",
     )
     source_id: str = Field(description="Which sensor produced this reading")
     position: GridPosition = Field(description="Where the sensor sits on the grid")
@@ -152,18 +152,20 @@ class RiskAssessment(BaseModel):
 
 
 class Corner(BaseModel):
-  row: int
-  col: int
+    row: int
+    col: int
+
 
 class SpreadRegion(BaseModel):
-  upper_left_corner: Corner
-  lower_left_corner: Corner
-  upper_right_corner: Corner
-  lower_right_corner: Corner
+    upper_left_corner: Corner
+    lower_left_corner: Corner
+    upper_right_corner: Corner
+    lower_right_corner: Corner
 
 
 class Evaluation(BaseModel):
     """Fire risk score for an individual cell."""
+
     escalate: bool = Field(
         description="TRUE if there is adequate risk that the fire could ignite and spread to the point that we need to plan now"
     )
@@ -174,7 +176,7 @@ class Evaluation(BaseModel):
     )
     potential_spread_area: SpreadRegion | None = Field(
         description="bounding box of a potential spread area expressed as (row,column) corners",
-        default=None
+        default=None,
     )
 
     confidence: int = Field(
@@ -186,16 +188,17 @@ class Evaluation(BaseModel):
         default_factory=list,
         description="""What drove the assessment: e.g. ['temp=52°C (>38 threshold)', 
                     'humidity=12% (<15 critical)', 'terrain=grassland (high fuel)',,
-                    'fire has fuel and conditions to spread 10 cells to the NE"""
+                    'fire has fuel and conditions to spread 10 cells to the NE""",
     )
+
 
 class Escalation(Evaluation):
     """Fire risk score for an individual cell."""
+
     sector_id: str
     row: int
     col: int
     layer: int
-
 
 
 class CollatedRecordRisk(BaseModel):
@@ -216,13 +219,13 @@ class CollatedRecordRisk(BaseModel):
     )
     confidence_rationale: str = Field(
         description="Why the agent chose this confidence level. "
-                    "e.g. 'Based on 2/3 sensor types with strong signal; "
-                    "wind data inferred from 6-hour forecast tool.'"
+        "e.g. 'Based on 2/3 sensor types with strong signal; "
+        "wind data inferred from 6-hour forecast tool.'"
     )
     contributing_factors: list[str] = Field(
         default_factory=list,
         description="What drove the assessment: e.g. ['temp=52°C (>38 threshold)', "
-                    "'humidity=12% (<15 critical)', 'terrain=grassland (high fuel)']",
+        "'humidity=12% (<15 critical)', 'terrain=grassland (high fuel)']",
     )
 
 
@@ -246,8 +249,6 @@ class EvaluationCell(BaseModel):
     layer: int
     attributes: dict
     state: FireCellState
-
-
 
 
 class EvaluationCells(BaseModel):
