@@ -184,10 +184,6 @@ def make_dispatch_commands(store: BaseStore | None = None):
 
 # ── Routers ──────────────────────────────────────────────────────────────────
 
-# Must match the risk_threshold passed to make_sector_analysis_node.
-# If sector_analysis won't find a hotspot, there's nothing for logistics to do.
-LOGISTICS_RISK_THRESHOLD = 5
-
 
 def route_after_assess(state: SupervisorState) -> str:
     """Conditional edge after assess_situation.
