@@ -5,20 +5,16 @@ changed cell (`state.updates`), collects each cluster's `Escalation`, summarises
 them, and routes to logistics when any escalated.
 """
 
-from langgraph.graph import END
-
 from agents.cluster.graph import build_cluster_agent_graph
 from agents.cluster.state import ClusterAgentState
 from agents.commons.schemas import Escalation
 from agents.commons.state_types import StatusValue
 from agents.supervisor.nodes import (
     assess_situation,
-    decide_actions,
     make_dispatch_commands,
     make_fan_out_to_clusters,
     make_run_cluster_agent,
     route_after_assess,
-    route_after_decide,
 )
 from agents.supervisor.state import SupervisorState
 from controllers.schemas import UpdatedCell
@@ -128,17 +124,6 @@ class TestAssessSituation:
         assert "1 of 2" in result["situation_summary"]
 
 
-# ── decide_actions tests ──────────────────────────────────────────────────────
-
-
-class TestDecideActions:
-    def test_returns_empty_command_list(self):
-        assert decide_actions(_make_state())["pending_commands"] == []
-
-    def test_status_is_processing(self):
-        assert decide_actions(_make_state())["status"] == StatusValue.PROCESSING
-
-
 # ── make_dispatch_commands tests ──────────────────────────────────────────────
 
 
@@ -146,10 +131,6 @@ class TestDispatchCommands:
     def test_sets_completed_status(self):
         dispatch = make_dispatch_commands(store=None)
         assert dispatch(_make_state())["status"] == StatusValue.COMPLETED
-
-    def test_handles_empty_commands(self):
-        dispatch = make_dispatch_commands(store=None)
-        assert dispatch(_make_state(pending_commands=[]))["status"] == StatusValue.COMPLETED
 
 
 # ── route_after_assess tests ─────────────────────────────────────────────────
@@ -172,20 +153,3 @@ class TestRouteAfterAssess:
             escalations=[_escalation(1, 1, escalate=False), _escalation(2, 2, escalate=True)]
         )
         assert route_after_assess(state) == "run_logistics_agent"
-
-
-# ── route_after_decide tests ──────────────────────────────────────────────────
-
-
-class TestRouteAfterDecide:
-    def test_routes_to_dispatch_commands_when_processing(self):
-        assert route_after_decide(_make_state(status=StatusValue.PROCESSING)) == "dispatch_commands"
-
-    def test_routes_to_dispatch_commands_when_idle(self):
-        assert route_after_decide(_make_state()) == "dispatch_commands"
-
-    def test_routes_to_end_on_error(self):
-        assert route_after_decide(_make_state(status=StatusValue.ERROR)) == END
-
-    def test_routes_to_end_on_completed(self):
-        assert route_after_decide(_make_state(status=StatusValue.COMPLETED)) == END

@@ -9,16 +9,14 @@ agents via LangGraph's Send API (parallel execution), waits for all results
 actuator commands.
 
 Quick reference:
-  - SupervisorState        → Pydantic state schema with aggregate_findings reducer
-  - ActuatorCommand        → Stub command structure for dispatch node
+  - SupervisorState        → Pydantic state schema (channels + reducers)
   - build_supervisor_graph → Factory that compiles the orchestration graph
 """
 
 from agents.supervisor.graph import build_supervisor_graph
-from agents.supervisor.state import ActuatorCommand, SupervisorState
+from agents.supervisor.state import SupervisorState
 
 __all__ = [
-    "ActuatorCommand",
     "SupervisorState",
     "build_supervisor_graph",
 ]

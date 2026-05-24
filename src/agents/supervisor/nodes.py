@@ -25,7 +25,6 @@ from langgraph.types import Send
 
 from agents.cluster.state import ClusterAgentState
 from agents.commons.node_executor import node_executor
-from agents.commons.routing import route_base
 from agents.commons.state_types import StatusValue
 from agents.logistics.state import LogisticsAgentState
 from agents.supervisor.state import SupervisorState
@@ -134,19 +133,6 @@ def assess_situation(state: SupervisorState) -> dict:
     }
 
 
-@node_executor("decide_actions")
-def decide_actions(state: SupervisorState) -> dict:
-    """Stub decider — returns no commands.
-
-    A real implementation will use the situation summary and cluster scores
-    to choose actuator commands (alert, escalate, drone_task, ...).
-    """
-    return {
-        "pending_commands": [],
-        "status": StatusValue.PROCESSING,
-    }
-
-
 def make_run_logistics_agent(logistics_graph: CompiledStateGraph):
     """Factory that closes over the compiled logistics subgraph.
 
@@ -187,17 +173,11 @@ def make_dispatch_commands(store: BaseStore | None = None):
 
     @node_executor("dispatch_commands")
     def dispatch_commands(state: SupervisorState) -> dict:
-       # todo - put something meaningful here or remove it
-       # commands = state.pending_commands
-       # logger.info("Supervisor dispatching %d command(s)", len(commands))
-
+        # Terminal node — stub. Surfaces the logistics plan; a real impl would
+        # publish advisories / actuator commands here.
         print("\nDISPATCH FINAL FINDINGS - STUB")
-        # print("Cluster risk scores (0–10)")
-        # for key, value in state.cluster_score.items():
-        #     print(f"{key}: risk_score: {value.risk_score}, confidence: {value.confidence}")
-        # if state.logistics_plan:
-        #     print("\nLOGISTICS PLAN")
-        #     print(state.logistics_plan)
+        if state.logistics_plan:
+            print(state.logistics_plan)
         return {"status": StatusValue.COMPLETED}
 
     return dispatch_commands
@@ -231,14 +211,3 @@ def route_after_assess(state: SupervisorState) -> str:
 
     logger.info("route_after_assess: no sectors escalated — skipping logistics")
     return "dispatch_commands"
-
-
-def route_after_decide(state: SupervisorState) -> str:
-    """Conditional edge router after decide_actions.
-
-    Delegates to route_base:
-      - status == ERROR     → END
-      - status == COMPLETED → END
-      - otherwise           → "dispatch_commands"
-    """
-    return route_base(state, next_node="dispatch_commands")

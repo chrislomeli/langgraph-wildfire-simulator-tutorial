@@ -35,12 +35,12 @@ from __future__ import annotations
 
 import operator
 import uuid
-from typing import Annotated, Any, NewType
+from typing import Annotated, NewType
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from agents.commons.schemas import (
     Escalation,
@@ -50,21 +50,6 @@ from controllers.schemas import UpdatedCell
 
 # ── Typed graph ────────────────────────────────────────────────────
 SupervisorGraph = NewType("SupervisorGraph", CompiledStateGraph)
-
-
-# ── Stub actuator command ────────────────────────────────────────────────────
-# Real implementation lives in src/actuators/. For the stub flow we
-# just need a structured container the dispatch node can log.
-
-
-class ActuatorCommand(BaseModel):
-    """Stub actuator command — placeholder until src/actuators/ is implemented."""
-
-    command_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    command_type: str
-    sector_id: str
-    payload: dict[str, Any] = Field(default_factory=dict)
-    priority: int = 3
 
 
 # ── Supervisor state ─────────────────────────────────────────────────────────
@@ -89,9 +74,6 @@ class SupervisorState(TracedState):
 
     # ── LLM reasoning (reserved for when the LLM is wired in) ────────
     messages: Annotated[list[BaseMessage], add_messages] = Field(default_factory=list)
-
-    # ── Decision output ──────────────────────────────────────────────
-    # pending_commands: list[ActuatorCommand] = Field(default_factory=list)
 
     # ── Situation summary ────────────────────────────────────────────
     situation_summary: str | None = None
