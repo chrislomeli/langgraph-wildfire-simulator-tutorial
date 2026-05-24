@@ -18,8 +18,6 @@ its own state in/out when it invokes the cluster agent subgraph.
 State design principles
 ────────────────────────
   - Only fields that at least one node reads OR writes belong here.
-  - Fields the LLM tool loop needs (messages) use LangGraph's add_messages
-    reducer so new messages are appended rather than overwriting the list.
   - Fields are ``X | None`` where they may not be set yet at graph start.
 
 Node responsibilities
@@ -37,8 +35,6 @@ import operator
 import uuid
 from typing import Annotated, NewType
 
-from langchain_core.messages import BaseMessage
-from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import Field
 
@@ -66,11 +62,6 @@ class ClusterAgentState(TracedState):
     anchor_row: int
     anchor_column: int
     anchor_layer: int = Field(default=0)
-
-    # ── Messages ─────────────────────────────────────────────────
-    # add_messages reducer appends new messages rather than overwriting.
-    # evaluate node reads and writes here via the ToolNode loop.
-    messages: Annotated[list[BaseMessage], add_messages] = Field(default_factory=list)
 
     # ── Payloads ─────────────────────────────────────────────────
     updated_cell: UpdatedCell | None = Field(default=None)

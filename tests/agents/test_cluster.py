@@ -58,7 +58,6 @@ class TestClusterAgentState:
         assert state.escalation is None
         assert state.briefing == {}
         assert state.scenario == {}
-        assert state.messages == []
         assert state.status == StatusValue.IDLE
 
     def test_sector_id_has_uuid_default(self):
