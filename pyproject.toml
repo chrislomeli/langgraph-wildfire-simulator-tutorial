@@ -64,7 +64,7 @@ dev = [
     "pytest-asyncio>=0.23",
     "pytest-cov>=4.0",
     "nbconvert>=7.0",
-    "ruff>=0.4",
+    "ruff>=0.4"
 ]
 
 [tool.ruff]

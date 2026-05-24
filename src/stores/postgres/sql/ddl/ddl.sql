@@ -59,18 +59,9 @@ create table terrain
     long                double precision,
     location            geography(Point, 4326),
     region              varchar(60),
-    terrain_type        varchar(20),
-    property_stake      varchar(10) default 'none'::character varying not null,
-    life_stake          varchar(10) default 'none'::character varying not null,
-    stake_notes         text,
+    terrain_code        varchar(20),
     constraint terrain_pk
-        unique (grid_column, grid_row),
-    constraint terrain_property_stake_ck
-        check ((property_stake)::text = ANY
-               ((ARRAY ['none'::character varying, 'low'::character varying, 'moderate'::character varying, 'high'::character varying])::text[])),
-    constraint terrain_life_stake_ck
-        check ((life_stake)::text = ANY
-               ((ARRAY ['none'::character varying, 'low'::character varying, 'moderate'::character varying, 'high'::character varying])::text[]))
+        unique (grid_column, grid_row)
 );
 
 create table sensors
@@ -190,11 +181,22 @@ create table cell_state
     fire_intensity     double precision default 0 not null,
     region             varchar(60),
     vegetation         double precision,
+    precipitation      double precision default 0.1,
     constraint cell_state_pk
         unique (version, grid_row, grid_column, layer, region)
 );
 
+comment on column cell_state.temperature_c is 'temperature in celcius';
+
+comment on column cell_state.wind_speed_mps is 'miles per secod';
+
+comment on column cell_state.wind_direction_deg is '360 degrees';
+
+comment on column cell_state.fuel_moisture is 'zero to 100% as a notmalized float';
+
 comment on column cell_state.vegetation is ' < 0     | water/cloud/snow/invalid  :: 0.0–0.1 | bare ground / rock  :: 0.1–0.3 | sparse vegetation :: 0.3–0.5 | moderate vegetation   :: 0.5–0.8 | dense healthy vegetation  ::| > 0.8   | extremely lush vegetation | ';
+
+comment on column cell_state.precipitation is '0 to 100% as a normalized float';
 
 create table cell_escalation
 (
@@ -258,7 +260,7 @@ create table scenario_cell_plan
         check (duration_ticks >= 1),
     constraint scp_metric_ck
         check ((metric)::text = ANY
-               ((ARRAY ['temperature_c'::character varying, 'humidity_pct'::character varying, 'wind_speed_mps'::character varying, 'wind_direction_deg'::character varying, 'pressure_hpa'::character varying, 'fuel_moisture'::character varying, 'vegetation'::character varying])::text[]))
+               (ARRAY [('precipitation'::character varying)::text, ('temperature_c'::character varying)::text, ('humidity_pct'::character varying)::text, ('wind_speed_mps'::character varying)::text, ('wind_direction_deg'::character varying)::text, ('pressure_hpa'::character varying)::text, ('fuel_moisture'::character varying)::text, ('vegetation'::character varying)::text]))
 );
 
 create table expected_escalation

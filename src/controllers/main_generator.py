@@ -1,20 +1,27 @@
 """main_generator.py — the world-service entry point.
 
-Stands up a bootstrapped scenario, ticks it forward, and emits a
-location-only change event per tick. The event sink (`call_advisory`)
-is stubbed: it dumps the payload for now.
+Stands up a bootstrapped scenario, ticks it forward, writes each tick's
+changed cells back to the DB working copy, and hands the changed cells to
+the advisory controller.
 
 Flow (see [[pod-architecture]]):
 
     1. bootstrap working copy from seed
     2. start_world_service → engine (WorldView + state_snapshot_log)
     3. iter_tick_events → one TickChangeEvent per tick
-    4. call_advisory(event) → stub sink (dump payload)
+    4. writeback changed cells to the DB working copy
+    5. call_advisory(event) → AdvisoryController.handle (in-process, for dev)
 
-Next step (deferred): call_advisory becomes a DB-mediated handoff to the
-advisory-service. The world-service writes state_snapshot_log back to the
-working-copy cell_state rows; advisory-service (a separate pod) reads that
-ground truth and decides. They will not share memory.
+The writeback happens BEFORE the advisory call so the advisory controller —
+which re-reads the world from the DB — sees this tick's grid, not the prior
+tick's.
+
+In-process vs. pods: today ``call_advisory`` calls the controller directly so
+the full sensor→risk→advisory pipeline runs end to end in one process. In
+production this becomes a DB-mediated handoff to a separate advisory pod: the
+world-service writes ``cell_state`` and emits a locations-only event; the
+advisory pod reads that ground truth and decides. They will not share memory —
+only the DB and the event payload.
 
 Run from the project root::
 
@@ -23,12 +30,13 @@ Run from the project root::
 
 from __future__ import annotations
 
+import asyncio
 import datetime
-import json
 import logging
 import uuid
 
-from ulid import ULID
+from controllers.main_advisor import AdvisoryController
+from controllers.schemas import AdvisoryRequest
 from logging_config import configure_logging
 
 configure_logging(level=logging.INFO)
@@ -46,27 +54,35 @@ VERSION = "simulation"
 HORIZON_TICKS = 30
 
 
-def call_advisory(region: str, version: str, event: TickChangeEvent) -> None:
-    """Event sink. Stub: dump the payload.
+async def call_advisory(
+    controller: AdvisoryController,
+    region: str,
+    version: str,
+    event: TickChangeEvent,
+) -> None:
+    """Hand this tick's changed cells to the advisory controller (in-process).
 
-    Later this becomes the handoff to advisory-service. Today it just
-    proves the world-service is emitting the right notifications.
+    Builds the same ``AdvisoryRequest`` the wire payload would carry and runs it
+    through the shared controller. In production this is replaced by a
+    DB-mediated handoff to a separate advisory pod; here we call ``handle``
+    directly so the whole pipeline runs end to end.
     """
+    cells = [dict(row=r, col=c, layer=layer) for (r, c, layer) in event.changed_cells]
+    request = AdvisoryRequest.model_validate(
+        dict(
+            id=str(uuid.uuid4()),
+            region=region,
+            version=version,
+            tick=event.tick,
+            timestamp=datetime.datetime.now().isoformat(),
+            cells=cells,
+        )
+    )
+    result = await controller.handle(request)
+    print(result.model_dump_json(indent=2))
 
-    cells = []
-    for cell in event.changed_cells:
-        cells.append(dict(row=cell[0], col=cell[1], layer=cell[2]))
 
-    payload = json.dumps(
-        dict(id=str(uuid.uuid4()),
-             region=region,
-             version=version,
-             tick=event.tick, timestamp=datetime.datetime.now().isoformat(), cells=cells),
-        indent=2)
-    print(payload)
-
-
-def generate_world_events(region: str, version: str, horizon_ticks: int) -> None:
+async def generate_world_events(region: str, version: str, horizon_ticks: int) -> None:
     data_store = get_postgres_data_store()
     try:
         engine = start_world_service(
@@ -75,6 +91,10 @@ def generate_world_events(region: str, version: str, horizon_ticks: int) -> None
             data_store=data_store,
             bootstrap=True,  # copy seed → working copy, then run
         )
+
+        # One controller, reused across every tick — its DB pool (the shared
+        # data_store) and LLM/prompt registries are built once, not per tick.
+        controller = AdvisoryController(data_store)
 
         logger.info(
             "world-service running: region=%r version=%r grid=%dx%d horizon=%d",
@@ -88,26 +108,30 @@ def generate_world_events(region: str, version: str, horizon_ticks: int) -> None
         updated = 0
         for event in iter_tick_events(engine, horizon_ticks=horizon_ticks):
             print(f"\nTICK {event.tick}")
-            call_advisory(region, version, event)
 
-            # Writeback: keep the DB working copy current as we tick. Only the
-            # cells that changed this tick are written (current state, no
-            # history — cell_state has no tick column). This is what the
-            # advisory-service reads as ground truth once it's a separate pod.
-            if event.changed_cells:
-                snapshots = [
-                    CellStateSnapshot(
-                        tick=event.tick,
-                        grid_row=r,
-                        grid_column=c,
-                        layer=layer,
-                        state=engine.get_cell(r, c, layer).cell_state.model_dump(),
-                    )
-                    for (r, c, layer) in event.changed_cells
-                ]
-                updated += data_store.cell_state.write_state(
-                    region=region, version=version, snapshots=snapshots
+            if not event.changed_cells:
+                continue
+
+            # Writeback FIRST: keep the DB working copy current so the advisory
+            # controller (which re-reads the world from the DB) sees this tick's
+            # grid. Only the cells that changed this tick are written (current
+            # state, no history — cell_state has no tick column).
+            snapshots = [
+                CellStateSnapshot(
+                    tick=event.tick,
+                    grid_row=r,
+                    grid_column=c,
+                    layer=layer,
+                    state=engine.get_cell(r, c, layer).cell_state.model_dump(),
                 )
+                for (r, c, layer) in event.changed_cells
+            ]
+            updated += data_store.cell_state.write_state(
+                region=region, version=version, snapshots=snapshots
+            )
+
+            # Then notify the advisory-service for the cells that changed.
+            await call_advisory(controller, region, version, event)
 
         logger.info(
             "world-service done: %d snapshots in log, %d cell-writes to DB",
@@ -121,4 +145,4 @@ def generate_world_events(region: str, version: str, horizon_ticks: int) -> None
 
 
 if __name__ == "__main__":
-    generate_world_events(region=REGION, version=VERSION, horizon_ticks=HORIZON_TICKS)
+    asyncio.run(generate_world_events(region=REGION, version=VERSION, horizon_ticks=HORIZON_TICKS))

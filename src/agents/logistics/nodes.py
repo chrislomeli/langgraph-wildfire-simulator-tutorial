@@ -74,14 +74,19 @@ STUB_LOGISTICS = True
 #      weather forecast, both computed upstream and carried in logistics state.
 
 
+def _fmt_corner(c) -> str:
+    """Render a SpreadRegion Corner as (row, col)."""
+    return f"({c.row}, {c.col})"
+
+
 def _render_spread_box(box: SpreadRegion | None) -> str:
     if box is None:
         return "  (no spread-area estimate provided)"
     return (
-        f"  corners (row,col): UL{tuple(box.upper_left_corner)} "
-        f"UR{tuple(box.upper_right_corner)} "
-        f"LL{tuple(box.lower_left_corner)} "
-        f"LR{tuple(box.lower_right_corner)}"
+        f"  corners (row,col): UL{_fmt_corner(box.upper_left_corner)} "
+        f"UR{_fmt_corner(box.upper_right_corner)} "
+        f"LL{_fmt_corner(box.lower_left_corner)} "
+        f"LR{_fmt_corner(box.lower_right_corner)}"
     )
 
 

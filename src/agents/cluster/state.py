@@ -77,6 +77,7 @@ class ClusterAgentState(TracedState):
     selected_cell: EvaluationCell | None = Field(default=None)
     heuristic_score: int | None = Field(default=None)
     escalation: Escalation | None  = Field(default=None)
+    evaluated: Annotated[dict, operator.or_] = Field(default_factory=dict)
     briefing: Annotated[dict, operator.or_] = Field(default_factory=dict)
     scenario: Annotated[dict, operator.or_] = Field(default_factory=dict)
 

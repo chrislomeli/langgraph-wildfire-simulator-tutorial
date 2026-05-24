@@ -162,6 +162,18 @@ class GenericWorldEngine(Generic[C]):
         """The current simulation tick (0-based, incremented after each tick)."""
         return self._tick
 
+    def set_tick(self, tick: int) -> None:
+        """Set the current tick without running physics.
+
+        Used when an engine is reconstructed from a persisted working copy —
+        e.g. the advisory-service loads the DB grid (already advanced to some
+        tick by the world-service) and must tell the engine which tick that
+        grid represents so tick-relative computations (create_forecast /
+        create_history) line up. This does NOT advance or mutate the grid; the
+        loaded state is taken as-is.
+        """
+        self._tick = tick
+
     # ── WorldView Protocol implementation ────────────────────────────
     # The engine exposes a minimal read surface that agent code depends on
     # via the ``WorldView`` Protocol. Keeping these as properties / forwarding
@@ -465,18 +477,31 @@ class GenericWorldEngine(Generic[C]):
             "periods": history_periods,
         }
 
+    def _baseline_cell(self, row: int, col: int, layer: int = 0):
+        """Baseline for forecast/history = the cell's real current state.
+
+        Reads the grid cell (the DB working-copy values loaded at startup), the
+        same source ``get_spread_risk_summary`` uses — NOT ``initial_cell_state``,
+        which returns a generic default. The plan still overrides any metric it
+        covers; this only sets the anchor for un-planned metrics and for plan
+        segments whose ``start_value`` is None. Falls back to the physics default
+        if the cell isn't on the grid.
+        """
+        cell = self.get_cell(row, col, layer)
+        return cell.cell_state if cell is not None else self.physics.initial_cell_state(row, col, layer)
+
     def create_forecast(self, row: int, col: int) -> dict:
-        fire_cell = self.physics.initial_cell_state(row, col)
+        fire_cell = self._baseline_cell(row, col)
         plan = self.physics.get_plan(row, col)
         return self.calculate_forecast(fire_cell=fire_cell, plan=plan, starting_tick=self.current_tick)
 
     def create_history(self, row: int, col: int) -> dict:
-        fire_cell = self.physics.initial_cell_state(row, col)
+        fire_cell = self._baseline_cell(row, col)
         plan = self.physics.get_plan(row, col)
         return self.calculate_history(fire_cell=fire_cell, plan=plan)
 
     def create_briefing(self, row: int, col: int) -> dict:
-        fire_cell = self.physics.initial_cell_state(row, col)
+        fire_cell = self._baseline_cell(row, col)
         plan = self.physics.get_plan(row, col)
         return {
             "history": self.calculate_history(fire_cell=fire_cell, plan=plan),

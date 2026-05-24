@@ -5,7 +5,7 @@ from langgraph.graph import END
 from langgraph.graph.state import CompiledStateGraph
 
 from agents.commons.agent_dependencies import AgentDependencies
-from agents.commons.schemas import Escalation, SpreadRegion
+from agents.commons.schemas import Corner, Escalation, SpreadRegion
 from agents.commons.state_types import StatusValue
 from agents.logistics.graph import build_logistics_agent_graph
 from agents.logistics.nodes import (
@@ -66,8 +66,8 @@ def _escalation(row: int, col: int, ignition_risk: int = 7) -> Escalation:
         confidence=2,
         reasoning=[f"planted hotspot at ({row},{col})"],
         potential_spread_area=SpreadRegion(
-            upper_left_corner=(row, col), upper_right_corner=(row, col + 1),
-            lower_left_corner=(row + 1, col), lower_right_corner=(row + 1, col + 1),
+            upper_left_corner=Corner(row=row, col=col), upper_right_corner=Corner(row=row, col=col + 1),
+            lower_left_corner=Corner(row=row + 1, col=col), lower_right_corner=Corner(row=row + 1, col=col + 1),
         ),
         sector_id=f"sector({row},{col})", row=row, col=col, layer=0,
     )

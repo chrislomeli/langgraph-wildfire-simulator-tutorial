@@ -49,7 +49,7 @@ from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 
-from agents.commons.schemas import CellReadings, CollatedRecordRisk, TracedState, Escalation
+from agents.commons.schemas import CellReadings, CollatedRecordRisk, TracedState, Escalation, EvaluationCell
 from controllers.schemas import AdvisoryRequest, UpdatedCell
 
 # ── Typed graph ────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ class SupervisorState(TracedState):
     escalations:  Annotated[list[Escalation], operator.add] = Field(default_factory=list)
     briefings: Annotated[dict, operator.or_] = Field(default_factory=dict)
     scenarios: Annotated[dict, operator.or_] = Field(default_factory=dict)
-
+    evaluated: Annotated[dict, operator.or_] = Field(default_factory=dict)
 
     # ── Input Legacy────────────────────────────────────────────────────────
     clusters: dict[str, list[CellReadings]] = Field(default_factory=dict)

@@ -10,7 +10,7 @@ escalations directly and assert the trace mechanics + combined summary.
 
 import pytest
 
-from agents.commons.schemas import Escalation, SpreadRegion
+from agents.commons.schemas import Corner, Escalation, SpreadRegion
 from agents.commons.state_types import StatusValue
 from agents.logistics.nodes import make_sector_analysis_node
 from agents.logistics.state import LogisticsAgentState
@@ -71,10 +71,10 @@ def _escalation(
         confidence=confidence,
         reasoning=[f"planted hotspot at ({row},{col})"],
         potential_spread_area=SpreadRegion(
-            upper_left_corner=(row, col),
-            upper_right_corner=(row, col + 1),
-            lower_left_corner=(row + 1, col),
-            lower_right_corner=(row + 1, col + 1),
+            upper_left_corner=Corner(row=row, col=col),
+            upper_right_corner=Corner(row=row, col=col + 1),
+            lower_left_corner=Corner(row=row + 1, col=col),
+            lower_right_corner=Corner(row=row + 1, col=col + 1),
         ),
         sector_id=f"sector({row},{col})",
         row=row,

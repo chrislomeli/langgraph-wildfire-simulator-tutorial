@@ -152,12 +152,15 @@ class RiskAssessment(BaseModel):
     )
 
 
+class Corner(BaseModel):
+  row: int
+  col: int
 
 class SpreadRegion(BaseModel):
-    upper_left_corner: tuple[int,int]
-    lower_left_corner: tuple[int,int]
-    upper_right_corner: tuple[int,int]
-    lower_right_corner: tuple[int,int]
+  upper_left_corner: Corner
+  lower_left_corner: Corner
+  upper_right_corner: Corner
+  lower_right_corner: Corner
 
 
 class Evaluation(BaseModel):

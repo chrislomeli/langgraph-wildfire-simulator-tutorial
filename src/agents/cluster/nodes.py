@@ -42,7 +42,7 @@ from agents.commons.node_executor import node_executor
 from agents.commons.routing import route_base
 from agents.commons.schemas import (
     Colors,
-    Escalation, EvaluationCell, Evaluation, SpreadRegion
+    Escalation, EvaluationCell, Evaluation, SpreadRegion, Corner
 )
 from agents.commons.state_types import StatusValue
 from controllers.schemas import UpdatedCell
@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 # True for the dashboard milestone: evaluate returns stub CollatedRecordRisk
 # records without calling an LLM. Flip to False in the next milestone once
 # the prompt template and LLM tooling are ready.
-STUB_RISK_SCORE = True
+STUB_RISK_SCORE = False
 
 # ── Heuristic gate ────────────────────────────────────────────────────────────
 #
@@ -225,14 +225,20 @@ def make_evaluate_node(
             evaluation =   Evaluation(
                     escalate=True,
                     ignition_risk=5,
-                    potential_spread_area=SpreadRegion(upper_left_corner=(5,5),  upper_right_corner=(5,10), lower_left_corner=(6,5), lower_right_corner=(6,15)),
+                    potential_spread_area=SpreadRegion(upper_left_corner=Corner(row=row, col=col),  upper_right_corner=Corner(row=row, col=col), lower_left_corner=Corner(row=row, col=col), lower_right_corner=Corner(row=row, col=col)),
                     confidence=3,
                     reasoning=["this is a dummy escalation"]
                 )
         else:
             print(f"""\n{Colors.BLUE}● CALLING LLM  {Colors.RESET}""")
             llm = llm_registry.get("classifier")
-            evaluation = await llm.with_structured_output(Evaluation).ainvoke(
+            # method="function_calling" instead of OpenAI's strict json_schema mode:
+            # SpreadRegion's tuple[int,int] corners render as JSON-schema arrays
+            # using prefixItems, which strict structured-output rejects ("array
+            # schema missing items"). Function calling accepts the tuple schema.
+            evaluation = await llm.with_structured_output(
+                Evaluation, method="function_calling"
+            ).ainvoke(
                 [
                     SystemMessage(system_prompt),
                     HumanMessage(human_prompt),
@@ -247,9 +253,13 @@ def make_evaluate_node(
             **evaluation.model_dump()
         )
 
+        eval_dict = evaluate_cell.state.model_dump()
+
+
         if escalation.escalate:
             print(f"""\nPROMOTE:: {Colors.TEAL}{escalation.model_dump_json(indent=2)}{Colors.RESET}""")
             return {
+                "evaluated": {(row, col, 0): eval_dict},
                 "briefing": {(row,col,layer): briefing},
                 "scenario": {(row,col,layer): scenario},
                 "escalation": escalation,
@@ -258,6 +268,7 @@ def make_evaluate_node(
         else:
             print(f"""\n{Colors.YELLOW} DEFER:: {escalation.model_dump_json(indent=2)}{Colors.RESET}""")
             return {
+                "evaluated": {(row, col, 0):  eval_dict},
                 "briefing": {(row,col,layer): briefing},
                 "scenario": {(row,col,layer): scenario},
                 "escalation": escalation,

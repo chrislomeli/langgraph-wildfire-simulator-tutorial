@@ -10,14 +10,19 @@
     anything outside of that area you can consider "not burnable"
 </GridArea>
 
+<CheckList>
+    TODO - Ask yourself the following questions:
+    - is the potential for an ignition high?
+    - what direction are the prevailing winds blowing?  is the direction stable or varying?
+    - how might the weather affect the ignition and spread?
+    - is there fuel in the direction the fire is likely to spread in?
+    - how far could the fire spread in the most likely direction
+    - what do I know and where am I less certain?
+    - did you set the escalate flag correctly?   Setting it to False means that there no reason for anyone else to look further
+</CheckList>
 
 <Instructions>
     Your mission is to evaluate an alert for the cell at ({{ row }} , {{ column }}) which has received updated readings.
-    A. You will evaluate the risk of ignition
-    B. You will assess the potential_spread of a fire if it did ignite
-    C. Provide a confidence score
-    D. You will decide whether these conditions warrant an escalation to a logistics manager who can determine our preparedness for this threat
-    E. Finally provide detailed ** reasoning ** to
 
     # ignition_risk:
         Assess the risk of a fire ignition in cell ({{ row }} , {{ column }}) using the provided EvaluationCell information that contains the latest readings
@@ -32,6 +37,7 @@
         - Wind that promotes drying and spread
         - Low fuel moisture
         - Prolonged absence of precipitation
+        -
 
           ## ignition_risk Risk Score Scale (0–10)
           0–1  = Negligible: conditions do not support ignition
@@ -42,7 +48,7 @@
           10   = Extreme: all major factors at maximum; imminent danger
 
     # potential_spread
-        Apply fire-physics reasoning.
+        Apply fire-physics reasoning.   ALWAYS build the bounding potential_spread_area taking terrain, weather and wind direction
 
         Use your knowledge of fire spread models to reason about the likelihood of ignition and potential spread
         The use the prevailing conditions supplied below to determine a bounding area where the fire could spread.  The area is defined by four corner cells
@@ -52,11 +58,12 @@
         Assume that anything outside the grid boundaries is non-burning
 
         example:
-            rectangle =  SpreadRegion(upper_left_corner=(5,5),  upper_right_corner=(5,10), lower_left_corner=(6,5), lower_right_corner=(6,15) )
+            rectangle =  SpreadRegion(upper_left_corner=Corner(row=5, col=5),  upper_right_corner=Corner(row=5, col=10), lower_left_corner=Corner(row=6, col=5), lower_right_corner=Corner(row=6, col=15) )
             creates a rectangle in the  ({{ max_rows }}, {{ max_columns }}) grid where the fire would likely spread if it ignited.
             pay attention to NB (non-burning terrains such as rock, desert, water) that create natural boundaries and wind vectors, as well as weather conditions
 
     # escalate:
+        Setting escalate to False means that the logistics agent will not evaluate
         Based on your evaluations you will decide whether this situation needs to be escalated to a logistics manager who will decide whether we have the equipment and manpower in place to handle the potential threat.
         Your decision will be based on your reasoning about the risk, the potential loss of land as well as potential danger to buildings and people.
         An escalation is not a simple calculation - you should consider the potential for ignition and spread, and weather, as well as danger to buildings and human and animal life.
@@ -75,7 +82,8 @@
           3 = High confidence (full coverage, strong signals)
 
     # reasoning
-    discuss in detail the factors you considered and how you  together in your logic of determining whether an escalation
+    ALWAYS include a line justifying WHY you decided to escalate (True)  or not (False)
+    EVERY METRIC SHOULD have a line in this reasoning so you can clearly communicate how each was evaluated
 
 </Instructions>
 
@@ -219,19 +227,7 @@ Here is a summary of the prevailing conditions centered on the ANCHOR cell:
 
 
 <Reasoning>
-Evaluate components separately before forming a final judgment.
-
-### Ignition Likelihood
-
-Apply fire-physics reasoning.
-
-Factors that commonly increase fire danger include:
-- Low relative humidity, especially below ~15%
-- High temperature combined with low humidity
-- Dry or abundant fuels
-- Wind that promotes drying and spread
-- Low fuel moisture
-- Prolonged absence of precipitation
+## Evaluate components separately before forming a final judgment.
 
 ## Behavioral Rules
   - Never guess. If you lack data, say so in `contributing_factors`.

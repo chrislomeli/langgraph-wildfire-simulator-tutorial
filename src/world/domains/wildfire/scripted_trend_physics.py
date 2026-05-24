@@ -59,6 +59,7 @@ _BOUNDS: dict[str, tuple[float, float]] = {
     "wind_speed_mps": (0.0, 50.0),
     "pressure_hpa": (950.0, 1060.0),
     "fuel_moisture": (0.0, 1.0),
+    "precipitation": (0.0, 1.0),  # 0–1 fraction (engine renders it as precip*100 %)
 }
 _METRICS = set(_BOUNDS) | {"wind_direction_deg"}
 
@@ -106,9 +107,11 @@ class ScriptedTrendPhysics(PhysicsModule[FireCellState]):
         return FireCellState()
 
     def get_plan(self, row: int, col: int, layer: int = 0):
-        key = (row,col,layer)
-        plan =   self._plan[key]
-        return plan
+        # Sparse plan: cells with no authored ramps return [] (they stay static
+        # at their seed). Indexing with [] would KeyError on those, crashing
+        # create_briefing for any unplanned cell — so use .get with an empty
+        # default to match the "absent → static" contract in this module's docs.
+        return self._plan.get((row, col, layer), [])
 
     def _resolve_start(
         self,

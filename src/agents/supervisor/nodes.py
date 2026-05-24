@@ -18,7 +18,6 @@ time. This keeps the module free of side effects at import time.
 """
 
 import logging
-import uuid
 
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
@@ -27,11 +26,9 @@ from langgraph.types import Send
 from agents.cluster.state import ClusterAgentState
 from agents.commons.node_executor import node_executor
 from agents.commons.routing import route_base
-from agents.commons.schemas import CellReadings, CollatedRecordRisk
 from agents.commons.state_types import StatusValue
 from agents.logistics.state import LogisticsAgentState
-from agents.supervisor.state import RiskScore, SupervisorState
-from controllers.schemas import AdvisoryRequest, UpdatedCell
+from agents.supervisor.state import SupervisorState
 from world import GenericWorldEngine
 
 logger = logging.getLogger(__name__)
@@ -104,6 +101,7 @@ def make_run_cluster_agent(cluster_graph: CompiledStateGraph):
         # so those clusters contribute nothing rather than raising KeyError.
         escalation = result.get("escalation")
         return {
+            "evaluated": result.get("evaluated", {}),
             "briefings": result.get("briefing", {}),
             "scenarios": result.get("scenario", {}),
             "escalations": [escalation] if escalation else [],
