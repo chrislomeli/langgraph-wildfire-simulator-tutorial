@@ -31,6 +31,7 @@ def _to_case(c: EscalationCase) -> Case[EscalationCase, dict]:
             "expect_escalate": c.expect_escalate,
             "expect_confidence": c.expect_confidence,
             "expect_keywords": list(c.expect_keywords),
+            "reasoning_criteria": c.reasoning_criteria,
         },
         notes=c.notes,
     )

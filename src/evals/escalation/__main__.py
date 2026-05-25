@@ -28,7 +28,8 @@ from config import get_settings
 from evals.escalation.cases import EscalationCase
 from evals.escalation.dataset import ScenariosDataset
 from evals.escalation.task import EscalationTask
-from evals.framework.evaluators import BooleanVote
+from evals.framework.evaluators import BooleanVote, ReferenceJudge
+from evals.framework.judge import make_llm_judge
 from evals.framework.langsmith_adapter import run_langsmith_eval, seed_dataset
 from llm.llm_registry import LLM_ROLE_CONFIG, build_llm_registry, models
 from prompts import PromptRegistry
@@ -63,11 +64,26 @@ def main(seed_only: bool = False) -> None:
         llm_registry=llm_registry,
     )
 
+    judge = make_llm_judge(llm_registry.get("classifier"))
+
     evaluators = [
+        # Gate: did the model make the right escalation decision?
+        # Cases where expect_escalate is None are skipped (ambiguous).
         BooleanVote(
             name="decision",
             predict=lambda o: o.get("escalate", False) if isinstance(o, dict) else o.escalate,
             expected=lambda x: x.get("expect_escalate"),
+        ),
+        # Rubric: did the model's reasoning satisfy the authored criteria?
+        # Cases with no reasoning_criteria authored are skipped by make_llm_judge.
+        ReferenceJudge(
+            name="reasoning_quality",
+            reference=lambda x: x.get("reasoning_criteria", ""),
+            actual=lambda o: "\n".join(
+                o.get("reasoning", []) if isinstance(o, dict) else o.reasoning
+            ),
+            judge=judge,
+            threshold=0.7,
         ),
     ]
 

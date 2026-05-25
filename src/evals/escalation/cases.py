@@ -35,6 +35,7 @@ class EscalationCase(BaseModel):
     expect_escalate: bool | None = None
     expect_confidence: str | None = None  # "high" | "low" | None = observe only
     expect_keywords: tuple[str, ...] = ()
+    reasoning_criteria: str = ""  # rubric for ReferenceJudge; empty = not scored
     notes: str = ""
 
 
@@ -242,6 +243,12 @@ CASES: list[EscalationCase] = [
         expect_escalate=False,
         expect_confidence="low",
         expect_keywords=("moisture",),
+        reasoning_criteria=(
+            "The reasoning must identify high fuel moisture as the primary factor suppressing fire risk. "
+            "It must acknowledge the atmospheric danger (hot/dry air, high wind) before explaining why "
+            "wet fuel overrides it — not ignore the dangerous conditions. "
+            "It must NOT recommend escalation without explaining why moisture negates the atmospheric risk."
+        ),
         notes="Reconciliation: wet fuel should temper the decision AND moisture must appear in reasoning.",
     ),
 
