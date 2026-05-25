@@ -1,53 +1,33 @@
-"""evals.framework — an agent-agnostic evaluation harness.
+"""evals.framework — agent-agnostic evaluation protocols.
 
-The spine::
+LangSmith is the run loop, storage, and UI. These protocols are the seam:
+Task and Evaluator are what you implement per agent; DatasetSource is how
+you load golden cases. langsmith_adapter.py translates them to LangSmith's
+calling conventions.
 
-    DatasetSource ─▶ [ Task × N samples ] ─▶ Evaluators ─▶ ExperimentStore
-                                                        ╲▶ Aggregators ─▶ Report
-
-Nothing in this package imports the agents, world, or DB layers. The pieces that
-vary per agent — the dataset, the ``Task`` adapter, and the evaluators' field
-wiring — plug in from OUTSIDE. The pieces that are DRY — the run loop, sampling,
-persistence interface, aggregation, and the Report — live here and are reused
-across every agent you evaluate.
-
-Runnable walkthrough (no LLM, no DB)::
-
-    python -m evals.framework.demo
+    DatasetSource ──▶ seed_dataset()   ──▶ LangSmith Dataset
+    Task          ──▶ make_target()    ──▶ LangSmith target fn
+    Evaluator     ──▶ make_evaluator() ──▶ LangSmith evaluator fn
 """
 
 from evals.framework.core import (
-    Aggregator,
     Case,
     CaseExecution,
     DatasetSource,
     Evaluator,
-    ExperimentStore,
-    Report,
-    RunId,
     Sample,
     Score,
     Task,
     Usage,
-    case_passed,
-    detect_regressions,
-    run_eval,
 )
 
 __all__ = [
-    "Aggregator",
     "Case",
     "CaseExecution",
     "DatasetSource",
     "Evaluator",
-    "ExperimentStore",
-    "Report",
-    "RunId",
     "Sample",
     "Score",
     "Task",
     "Usage",
-    "case_passed",
-    "detect_regressions",
-    "run_eval",
 ]

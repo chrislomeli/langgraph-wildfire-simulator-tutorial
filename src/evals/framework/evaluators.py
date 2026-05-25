@@ -41,9 +41,12 @@ class BooleanVote:
         outs = ex.outputs
         if not outs:
             return [Score(self.name, 0.0, passed=False, detail="all samples parse-failed")]
+        expected_val = self.expected(ex.case.expected)
+        if expected_val is None:
+            return [Score(self.name, 0.0, passed=None, detail="not scored (ambiguous case)")]
         actual_outputs = [bool(self.predict(o)) for o in outs]
         actual_majority = _majority(actual_outputs)
-        expected = bool(self.expected(ex.case.expected))
+        expected = bool(expected_val)
         ok = actual_majority == expected
         return [
             Score(
