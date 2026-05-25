@@ -14,8 +14,10 @@ from agents.commons.schemas import Corner, Escalation, SpreadRegion
 from agents.commons.state_types import StatusValue
 from agents.logistics.nodes import make_sector_analysis_node
 from agents.logistics.state import LogisticsAgentState
+from world.directions import SECTOR_VECTORS
 from world.domains.wildfire.cell_state import FireCellState
 from world.generic_grid import GenericTerrainGrid
+from world.sector_analysis import HotspotSectors, analyze_sector, trace_sector
 
 # ── Self-contained world ──────────────────────────────────────────────────────
 #
@@ -47,6 +49,16 @@ class _GridWorld:
         if 0 <= row < self.grid.rows and 0 <= col < self.grid.cols:
             return self.grid.get_cell(row, col, layer)
         return None
+
+    def hotspot_sectors(self, row: int, col: int, max_miles: float = 5.0) -> HotspotSectors:
+        max_cells = int((max_miles * 5280) / self.cell_size_ft)
+        anchor = self.get_cell(row, col)
+        wind_dir = getattr(anchor.cell_state, "wind_direction_deg", 0.0) if anchor else 0.0
+        sectors = []
+        for sector_name, (dr, dc) in SECTOR_VECTORS.items():
+            _miles, cells, stop_reason = trace_sector(self, row, col, dr, dc, max_cells, self.cell_size_ft)
+            sectors.append(analyze_sector(sector_name, cells, stop_reason, wind_dir, self.cell_size_ft))
+        return HotspotSectors(epicenter_row=row, epicenter_col=col, risk_score=0, confidence=0, sectors=sectors)
 
 
 @pytest.fixture

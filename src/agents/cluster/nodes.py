@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 # True for the dashboard milestone: evaluate returns stub CollatedRecordRisk
 # records without calling an LLM. Flip to False in the next milestone once
 # the prompt template and LLM tooling are ready.
-STUB_RISK_SCORE = False
+STUB_RISK_SCORE = True
 
 # ── Heuristic gate ────────────────────────────────────────────────────────────
 #
@@ -197,8 +197,8 @@ def make_evaluate_node(
         max_rows, max_columns = world_engine.get_bounding()
         row, col, layer = evaluate_cell.row, evaluate_cell.col, 0
 
-        # provide a breakdown of conditions surrounding the changed cell
-        scenario = world_engine.get_spread_risk_summary(row, col)
+        # Short-range radial trace — burnable distance + barriers around anchor.
+        scenario = world_engine.hotspot_sectors(row, col, max_miles=1.0)
 
         # provide a weather forecast
         briefing = world_engine.create_briefing(row, col)
@@ -213,7 +213,7 @@ def make_evaluate_node(
                 max_columns=max_columns,
                 row=row,
                 column=col,
-                scenario=json.dumps(scenario, indent=2),
+                scenario=scenario.to_context_string(),
                 history=json.dumps(history, indent=2),
                 forecast=json.dumps(forecast, indent=2),
             ),

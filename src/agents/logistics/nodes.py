@@ -45,12 +45,7 @@ from llm.llm_registry import LLMRegistry
 from prompts import PromptRegistry
 from stores.base import AdvisoryRepository
 from tools.advisory import dispatch_advisory
-from world import (
-    SECTOR_VECTORS,
-    HotspotSectors,
-    analyze_sector,
-    trace_sector,
-)
+from world import HotspotSectors
 from world.world_view import WorldView
 
 logger = logging.getLogger(__name__)
@@ -92,26 +87,6 @@ def _render_spread_box(box: SpreadRegion | None) -> str:
     )
 
 
-def _render_scenario(scenario: dict | None) -> str:
-    if not scenario:
-        return "  (no cluster spread-risk summary available)"
-    lines = [
-        f"  Wind from {scenario.get('wind_from_compass', '?')} "
-        f"({scenario.get('wind_from_degrees', 0)}°) at "
-        f"{scenario.get('wind_speed_mps', 0)} m/s"
-    ]
-    for d in ("N", "NE", "E", "SE", "S", "SW", "W", "NW"):
-        entry = scenario.get(d)
-        if not isinstance(entry, dict):
-            continue
-        lines.append(
-            f"  {d:<2}: ignition-risk avg={entry.get('avg_risk', 0):.2f} "
-            f"max={entry.get('max_risk', 0):.2f} "
-            f"({entry.get('risk_level', '?')}, {entry.get('cell_count', 0)} cells)"
-        )
-    return "\n".join(lines)
-
-
 def _render_forecast(briefing: dict | None, periods: int = 4) -> str:
     if not briefing or not briefing.get("forecast"):
         return "  (no forecast available)"
@@ -133,7 +108,6 @@ def _render_forecast(briefing: dict | None, periods: int = 4) -> str:
 def _render_hotspot_context(
     escalation: Escalation,
     hotspot: HotspotSectors,
-    scenario: dict | None,
     briefing: dict | None,
 ) -> str:
     """Render one escalated hotspot into the rich combined situation block."""
@@ -146,9 +120,6 @@ def _render_hotspot_context(
     parts.append("")
     parts.append("Radial sector trace (live grid scan — burnable distance & barriers):")
     parts.append(hotspot.to_context_string())
-    parts.append("")
-    parts.append("Spread-risk by direction (cluster ignition-risk summary):")
-    parts.append(_render_scenario(scenario))
     parts.append("")
     parts.append("Weather forecast (upcoming periods):")
     parts.append(_render_forecast(briefing))
@@ -185,9 +156,6 @@ def make_sector_analysis_node(
     Node function that returns {"sector_analysis": [...], "situation_summary":
     str, "status": PROCESSING}.
     """
-    cell_size_ft = world.cell_size_ft
-    max_cells = int((max_sector_miles * 5280) / cell_size_ft)
-
     @node_executor("sector_analysis")
     def sector_analysis(state: LogisticsAgentState) -> dict:
         """Build per-hotspot situation context from the escalations."""
@@ -210,37 +178,22 @@ def make_sector_analysis_node(
 
         for esc in escalations:
             row, col = esc.row, esc.col
-            cell = world.get_cell(row, col)
-            wind_dir = getattr(cell.cell_state, "wind_direction_deg", 0) if cell else 0
 
-            # Live 8-sector radial trace — burnable distance + barriers.
-            sectors = []
-            for sector_name, (dr, dc) in SECTOR_VECTORS.items():
-                _miles, sector_cells, stop_reason = trace_sector(
-                    world, row, col, dr, dc, max_cells, cell_size_ft
-                )
-                sectors.append(
-                    analyze_sector(sector_name, sector_cells, stop_reason, wind_dir, cell_size_ft)
-                )
-
+            # Long-range radial trace via the world engine.
+            hotspot = world.hotspot_sectors(row, col, max_miles=max_sector_miles)
             hotspot = HotspotSectors(
                 epicenter_row=row,
                 epicenter_col=col,
                 risk_score=esc.ignition_risk,
                 confidence=esc.confidence,
-                sectors=sectors,
+                sectors=hotspot.sectors,
             )
             hotspots.append(hotspot)
 
-            # Pull the cluster's per-hotspot context. Keys are (row, col, layer);
-            # the cluster stores them at layer 0, so fall back to that.
-            scenario = state.scenarios.get((row, col, esc.layer)) or state.scenarios.get(
-                (row, col, 0)
-            )
             briefing = state.briefings.get((row, col, esc.layer)) or state.briefings.get(
                 (row, col, 0)
             )
-            context_parts.append(_render_hotspot_context(esc, hotspot, scenario, briefing))
+            context_parts.append(_render_hotspot_context(esc, hotspot, briefing))
             context_parts.append("")
 
             logger.info(
@@ -248,7 +201,7 @@ def make_sector_analysis_node(
                 row,
                 col,
                 esc.ignition_risk,
-                max(s.burnable_miles for s in sectors),
+                max(s.burnable_miles for s in hotspot.sectors),
             )
 
         logger.info(

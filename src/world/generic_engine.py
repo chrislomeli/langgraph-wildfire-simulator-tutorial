@@ -42,8 +42,6 @@ This is essential for comparing agent configurations and regression testing.
 from __future__ import annotations
 
 import logging
-import math
-from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any, Generic
@@ -239,7 +237,7 @@ class GenericWorldEngine(Generic[C]):
     def get_bounding(self):
         return self.rows, self.cols
 
-    # ── Spread-risk summary ───────────────────────────────────────────────────
+    # ── Radial sector analysis ────────────────────────────────────────────────
 
     @staticmethod
     def degrees_to_compass(degrees: float) -> str:
@@ -247,118 +245,37 @@ class GenericWorldEngine(Generic[C]):
         labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
         return labels[round(degrees / 45) % 8]
 
-    @staticmethod
-    def _bearing(dr: int, dc: int) -> float:
-        """Compass bearing in degrees from anchor to neighbor (N=0, clockwise)."""
-        angle = math.degrees(math.atan2(dc, -dr))
-        return (angle + 360) % 360
+    def hotspot_sectors(self, row: int, col: int, max_miles: float = 5.0) -> "HotspotSectors":
+        """8-direction radial trace around (row, col).
 
-    @staticmethod
-    def _octant(dr: int, dc: int) -> str:
-        octants = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-        bearing = GenericWorldEngine._bearing(dr, dc)
-        return octants[round(bearing / 45) % 8]
-
-    @staticmethod
-    def _wind_alignment(bearing_deg: float, wind_direction_deg: float) -> float:
-        """1.0 = fully downwind, 0.0 = fully upwind."""
-        wind_to = (wind_direction_deg + 180) % 360
-        diff = abs(bearing_deg - wind_to) % 360
-        diff = min(diff, 360 - diff)
-        return (math.cos(math.radians(diff)) + 1) / 2
-
-    @staticmethod
-    def _cell_spread_risk(state, bearing_deg: float) -> float:
+        Walks outward in each cardinal/intercardinal direction until hitting a
+        barrier (water, urban, rock), a burned area, the grid edge, or max_miles.
+        Returns a HotspotSectors with burnable distance, stop reason, and fuel
+        stats per sector — the canonical radial view used by both the cluster
+        evaluate node (short range) and the logistics sector_analysis (long range).
         """
-        Single-cell ignition risk score (0.0–1.0) for an UNBURNED neighbour.
+        from world.directions import SECTOR_VECTORS
+        from world.sector_analysis import HotspotSectors, analyze_sector, trace_sector
 
-        Combines fuel load, moisture, slope, and wind alignment.
-        Returns 0.0 for BURNING or BURNED cells — they are not ignition candidates.
-        Requires a FireCellState; returns 0.0 for any other cell type.
-        """
-        from world.domains.wildfire import FireCellState
-        from world.grid import FireState
+        cell_size_ft = self.cell_size_ft
+        max_cells = int((max_miles * 5280) / cell_size_ft)
+        anchor = self.get_cell(row, col, 0)
+        wind_dir = getattr(anchor.cell_state, "wind_direction_deg", 0.0) if anchor else 0.0
 
-        if not isinstance(state, FireCellState):
-            return 0.0
-        if state.fire_state != FireState.UNBURNED:
-            return 0.0
-        veg = max(0.0, min(1.0, state.vegetation))
-        moisture = max(0.0, min(1.0, state.fuel_moisture))
-        base = veg * (1 - moisture)
-        slope_factor = max(0.1, 1 + (0.1 * state.slope))
-        wind = GenericWorldEngine._wind_alignment(bearing_deg, state.wind_direction_deg)
-        return round(base * slope_factor * wind, 3)
+        sectors = []
+        for sector_name, (dr, dc) in SECTOR_VECTORS.items():
+            _miles, sector_cells, stop_reason = trace_sector(
+                self, row, col, dr, dc, max_cells, cell_size_ft
+            )
+            sectors.append(analyze_sector(sector_name, sector_cells, stop_reason, wind_dir, cell_size_ft))
 
-    def get_spread_risk_summary(self, anchor_row: int, anchor_col: int, radius: int = 5) -> dict:
-        """
-        Summarise fire-spread risk in each compass direction around an anchor cell.
-
-        Returns a dict keyed by direction (N, NE, E, SE, S, SW, W, NW).
-        Each entry: {"cell_count": int, "avg_risk": float, "max_risk": float}
-
-        Risk is derived from vegetation, fuel moisture, slope, and wind alignment.
-        Only UNBURNED neighbours contribute; BURNING/BURNED cells score 0.0 because
-        the question is where fire might START next, not where it already is.
-        Intended as prompt context — include in the agent briefing, not as a tool call.
-        """
-        buckets: dict[str, list[float]] = defaultdict(list)
-
-        for r in range(anchor_row - radius, anchor_row + radius + 1):
-            for c in range(anchor_col - radius, anchor_col + radius + 1):
-                if r == anchor_row and c == anchor_col:
-                    continue
-                cell = self.get_cell(r, c, 0)
-                if cell is None:
-                    continue
-                dr, dc = r - anchor_row, c - anchor_col
-                bearing = self._bearing(dr, dc)
-                direction = self._octant(dr, dc)
-                risk = self._cell_spread_risk(cell.cell_state, bearing)
-                buckets[direction].append(risk)
-
-        anchor = self.get_cell(anchor_row, anchor_col, 0)
-        wind_deg = getattr(anchor.cell_state, "wind_direction_deg", 0.0) if anchor else 0.0
-        wind_speed = getattr(anchor.cell_state, "wind_speed_mps", 0.0) if anchor else 0.0
-        summary: dict = {
-            "wind_from_degrees": wind_deg,
-            "wind_from_compass": self.degrees_to_compass(wind_deg),
-            "wind_speed_mps": wind_speed,
-        }
-
-        directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-        for direction in directions:
-            risks = buckets.get(direction, [])
-            if not risks:
-                summary[direction] = {
-                    "cell_count": 0,
-                    "avg_risk": 0.0,
-                    "max_risk": 0.0,
-                    "risk_level": "MINIMAL",
-                }
-            else:
-                avg = round(sum(risks) / len(risks), 3)
-                mx = round(max(risks), 3)
-                avg_label = self._risk_label(avg)
-                max_label = self._risk_label(mx)
-                risk_level = avg_label if avg_label == max_label else f"{avg_label}-{max_label}"
-                summary[direction] = {
-                    "cell_count": len(risks),
-                    "avg_risk": avg,
-                    "max_risk": mx,
-                    "risk_level": risk_level,
-                }
-        return summary
-
-    @staticmethod
-    def _risk_label(score: float) -> str:
-        if score >= 0.7:
-            return "HIGH"
-        if score >= 0.4:
-            return "MEDIUM"
-        if score >= 0.1:
-            return "LOW"
-        return "MINIMAL"
+        return HotspotSectors(
+            epicenter_row=row,
+            epicenter_col=col,
+            risk_score=0,
+            confidence=0,
+            sectors=sectors,
+        )
 
     # ── Forecast ─────────────────────────────────────────────────────────────
 

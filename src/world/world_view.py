@@ -15,9 +15,12 @@ convention, matching ``RiskView``.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from world.cell_state import C, GenericCell
+
+if TYPE_CHECKING:
+    from world.sector_analysis import HotspotSectors
 
 
 @runtime_checkable
@@ -34,3 +37,5 @@ class WorldView(Protocol[C]):
     def cell_size_ft(self) -> float: ...
 
     def get_cell(self, row: int, col: int, layer: int = 0) -> GenericCell[C]: ...
+
+    def hotspot_sectors(self, row: int, col: int, max_miles: float = 5.0) -> "HotspotSectors": ...

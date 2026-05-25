@@ -81,7 +81,7 @@ class LogisticsAgentState(TracedState):
     escalations: list[Escalation] = Field(default_factory=list)
     # Per-hotspot context computed upstream by the cluster agent, keyed by
     # (row, col, layer):
-    #   scenarios : radial spread-risk summary (engine.get_spread_risk_summary)
+    #   scenarios : short-range radial trace from cluster (engine.hotspot_sectors)
     #   briefings : NWS-style weather history + forecast (engine.create_briefing)
     scenarios: dict = Field(default_factory=dict)
     briefings: dict = Field(default_factory=dict)
