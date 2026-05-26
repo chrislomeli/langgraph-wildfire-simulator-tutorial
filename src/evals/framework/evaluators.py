@@ -94,7 +94,7 @@ class NumericTolerance:
 class KeywordPresence:
     """Deterministic groundedness check: all required substrings appear in the text.
 
-    text : Output -> str  (e.g. lambda o: " ".join(o.reasoning))
+    text : Output -> str  (e.g. lambda o: o.temperature_humidity + " " + o.wind)
 
     Useful where 'fuzzy' is actually checkable without a judge — cheaper and more
     reliable than an LLM when you just need "did it cite the thing it must cite".

@@ -23,7 +23,7 @@ live inside `agents/logistics/nodes.py`; it was lifted here because:
 Output shape
 ────────────
 For a hotspot we return a `HotspotSectors` with:
-  - epicenter_row, epicenter_col, risk_score, confidence
+  - epicenter_row, epicenter_col
   - 8 `SectorSummary` records (one per cardinal/intercardinal direction)
 
 Each `SectorSummary` contains:

@@ -17,7 +17,7 @@ class ScenariosDataset:
     traceable to the dataset version they scored.
     """
 
-    version = "v2"
+    version = "v3"
 
     def load(self) -> list[Case[EscalationCase, dict]]:
         return [_to_case(c) for c in build_cases()]
@@ -29,7 +29,6 @@ def _to_case(c: EscalationCase) -> Case[EscalationCase, dict]:
         input=c,
         expected={
             "expect_escalate": c.expect_escalate,
-            "expect_confidence": c.expect_confidence,
             "expect_keywords": list(c.expect_keywords),
             "reasoning_criteria": c.reasoning_criteria,
         },

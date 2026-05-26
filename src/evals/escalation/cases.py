@@ -24,7 +24,6 @@ from world.grid import TerrainType
 
 class EscalationCase(EvaluatorLLMRequest):
     expect_escalate: bool | None = None
-    expect_confidence: str | None = None  # "high" | "low" | None = observe only
     expect_keywords: tuple[str, ...] = ()
     reasoning_criteria: str = ""  # rubric for ReferenceJudge; empty = not scored
     description: str
@@ -115,7 +114,13 @@ def build_cases() -> list[EscalationCase]:
         forecast=_forecast(46.0, 7.0, 23.0, "SW", 0.04),
         trend=_history(42.0, 10.0, 20.0, "SW", 0.07),
         expect_escalate=True,
-        expect_confidence="high",
+        reasoning_criteria=(
+            "The reasoning must argue that all four factors compound each other with no offsetting signal. "
+            "It must not treat this as a close call or hedge — when temperature, humidity, wind, fuel load, and "
+            "fuel moisture are simultaneously at critical levels, the correct synthesis is unambiguous escalation. "
+            "A passing response names the compounding effect explicitly: dangerous air dries already-dry fuel, "
+            "strong wind drives spread through unbroken fuel in every direction. No single factor is borderline."
+        ),
         notes="Sanity: all major danger factors elevated. Model should escalate confidently.",
     ),
 
@@ -146,7 +151,13 @@ def build_cases() -> list[EscalationCase]:
         forecast=_forecast(13.0, 82.0, 2.0, "E", 0.70, precip_pct=30.0),
         trend=_history(11.0, 88.0, 1.5, "E", 0.72, rain="0.02 inches  per hour "),
         expect_escalate=False,
-        expect_confidence="high",
+        reasoning_criteria=(
+            "The reasoning must argue that saturated fuel moisture is the decisive factor — not just one of several safe signals. "
+            "Vegetation exists, so a naive reading might flag risk; the synthesis must explicitly offset fuel availability "
+            "against the moisture state and conclude that wet fuel cannot sustain ignition regardless of what is present. "
+            "Precipitation history reinforcing this trend must be part of the argument, not just the current reading. "
+            "A failing response escalates on vegetation density without weighing the moisture override."
+        ),
         notes="Sanity / false-positive guard. Suppress this and you can trust the False path.",
     ),
 
@@ -178,7 +189,13 @@ def build_cases() -> list[EscalationCase]:
         forecast=_forecast(45.0, 8.0, 16.0, "N", 0.05),
         trend=_history(41.0, 11.0, 14.0, "N", 0.06),
         expect_escalate=False,
-        expect_confidence="high",
+        reasoning_criteria=(
+            "The reasoning must apply a hard override: no fuel means no fire, regardless of how dangerous the atmosphere is. "
+            "The synthesis must acknowledge the atmospheric danger genuinely — 44°C, 9% RH, 15 m/s wind are all real — "
+            "and then explicitly argue that ROCK terrain with zero vegetation eliminates the fuel leg of the fire triangle, "
+            "making ignition physically impossible. This is not a close call with offsetting factors; it is a disqualifying condition. "
+            "A failing response escalates because of the atmospheric readings without addressing the absence of combustible material."
+        ),
         notes="Burnability rule: scary weather over non-fuel is not a fire risk.",
     ),
 
@@ -209,7 +226,15 @@ def build_cases() -> list[EscalationCase]:
         forecast=_forecast(34.0, 15.0, 10.0, "W", 0.24),
         trend=_history(31.0, 18.0, 9.0, "W", 0.27),
         expect_escalate=None,
-        expect_confidence="low",
+        reasoning_criteria=(
+            "The reasoning must show that the agent attempted to weigh the factors against each other and found no decisive one. "
+            "Temperature and humidity are elevated but not at critical thresholds; fuel is present but not critically dry; "
+            "wind is meaningful but not extreme. The synthesis must name this as a genuine balance — not a hidden lean toward "
+            "one outcome dressed up as uncertainty. "
+            "A passing response arrives at low confidence because the factors genuinely conflict at moderate levels, "
+            "not because the agent is hedging to avoid being wrong. "
+            "A failing response manufactures a confident argument for either escalation or dismissal from the same moderate inputs."
+        ),
         notes="Calibration: model should not be confident here. Either call is defensible.",
     ),
 
@@ -240,13 +265,17 @@ def build_cases() -> list[EscalationCase]:
         forecast=_forecast(41.0, 11.0, 14.0, "NW", 0.70),
         trend=_history(37.0, 15.0, 12.0, "NW", 0.80, rain="0.03 inches  per hour "),
         expect_escalate=False,
-        expect_confidence="low",
         expect_keywords=("moisture",),
         reasoning_criteria=(
-            "The reasoning must identify high fuel moisture as the primary factor suppressing fire risk. "
-            "It must acknowledge the atmospheric danger (hot/dry air, high wind) before explaining why "
-            "wet fuel overrides it — not ignore the dangerous conditions. "
-            "It must NOT recommend escalation without explaining why moisture negates the atmospheric risk."
+            "The reasoning must resolve a genuine conflict: the atmosphere says danger, the fuel says no. "
+            "The synthesis must argue that fuel moisture of 0.75 (D4 — High) is a physical override, not merely "
+            "a mitigating factor — wet fuel at this level cannot sustain ignition regardless of how dangerous "
+            "the air is. The agent must acknowledge the atmospheric danger (40°C, 12% RH, 14 m/s wind) "
+            "before explaining the override, not ignore it. The precipitation trend that produced this moisture "
+            "state must appear as the causal chain, not just a data point. "
+            "A failing response escalates on the atmospheric readings alone without resolving the conflict. "
+            "A failing response also de-escalates without naming fuel moisture as the decisive override — "
+            "'conditions are mixed' without identifying the determining factor is not synthesis."
         ),
         notes="Reconciliation: wet fuel should temper the decision AND moisture must appear in reasoning.",
     ),
@@ -281,7 +310,18 @@ def build_cases() -> list[EscalationCase]:
         forecast=_forecast(39.0, 13.0, 17.0, "variable", 0.14),
         trend=_history(36.0, 16.0, 14.0, "variable", 0.17),
         expect_escalate=True,
-        expect_confidence=None,
+        reasoning_criteria=(
+            "The reasoning must separate two questions the data forces apart: can ignition happen, "
+            "and where would fire spread? "
+            "The synthesis must argue that ignition risk is high and independently justifies escalation — "
+            "38°C, 14% RH, fuel moisture 0.15 (D2/Low), and unbroken continuous fuel in all directions "
+            "are not a close call. These factors alone are sufficient to escalate. "
+            "Wind direction conflict (anchor: 10°N; neighbors: 110° and 250°) affects only the spread "
+            "geometry — it does not reduce the probability that a fire starts. "
+            "Low confidence must be attributed specifically to spread direction uncertainty, not to ignition risk. "
+            "A failing response withholds escalation because spread direction is uncertain, conflating "
+            "'we don't know where it will go' with 'we don't know if it will start.'"
+        ),
         notes=(
             "Dangerous fuel+weather → should escalate. Confidence behavior under "
             "directional ambiguity is what to watch."

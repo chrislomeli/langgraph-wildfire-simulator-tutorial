@@ -143,8 +143,8 @@ def make_run_logistics_agent(logistics_graph: CompiledStateGraph):
     @node_executor("run_logistics_agent")
     def run_logistics_agent(state: SupervisorState) -> dict:
         # Hand the logistics agent the hotspots the cluster agents already found
-        # and escalated — anchor, ignition_risk, confidence, reasoning, and the
-        # spread bounding box — plus the per-hotspot scenario/briefing context.
+        # and escalated — anchor, reasoning, per-axis factors, and radial sector
+        # analysis — plus the per-hotspot scenario/briefing context.
         escalated = [e for e in state.escalations if e.escalate]
         logistics_state = LogisticsAgentState(
             situation_summary=state.situation_summary or "",

@@ -41,13 +41,12 @@ from agents.cluster.state import ClusterAgentState
 from agents.commons.node_executor import node_executor
 from agents.commons.routing import route_base
 from agents.commons.schemas import (
+    AxisFactors,
     Colors,
-    Corner,
     Escalation,
     Evaluation,
     EvaluationCell,
     EvaluatorLLMRequest,
-    SpreadRegion,
 )
 from agents.commons.state_types import StatusValue
 from controllers.schemas import UpdatedCell
@@ -216,16 +215,14 @@ async def call_evaluate_llm(
 
     if trial_only:
         evaluation = Evaluation(
-            escalate=True,
-            ignition_risk=5,
-            potential_spread_area=SpreadRegion(
-                upper_left_corner=Corner(row=row, col=col),
-                upper_right_corner=Corner(row=row, col=col),
-                lower_left_corner=Corner(row=row, col=col),
-                lower_right_corner=Corner(row=row, col=col),
+            factors=AxisFactors(
+                temperature_humidity="stub — not evaluated",
+                wind="stub — not evaluated",
+                fuel_and_terrain="stub — not evaluated",
+                moisture_trend="stub — not evaluated",
             ),
-            confidence=3,
-            reasoning=["this is a dummy escalation"],
+            reasoning="stub — not evaluated",
+            escalate=True,
         )
         tokens = 0
     else:
@@ -247,6 +244,7 @@ async def call_evaluate_llm(
         col=evaluate_cell.col,
         layer=evaluate_cell.layer,
         sector_id=llm_request.id,
+        scenario_text=llm_request.scenario_text,
         **evaluation.model_dump(),
     )
     return escalation, tokens
@@ -266,7 +264,9 @@ def make_call_evaluate_llm(
             trial_only=trial_only,
         )
         if escalation is None:
-            return {"escalation": None, "status": StatusValue.PROCESSING}
+            return {"escalation": None,
+                    "error": "No escalation output returned from llm",
+                    "status": StatusValue.ERROR}
         return {
             "evaluated": llm_request.cell.state.model_dump(),
             "escalation": escalation,

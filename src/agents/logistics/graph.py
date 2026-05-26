@@ -14,7 +14,7 @@ Topology
 The ReAct loop
 ──────────────
 1. sector_analysis consumes the escalations the cluster agents already found
-   (anchor, ignition_risk, confidence, reasoning, spread bounding box). For
+   (anchor, reasoning, per-axis factors, radial sector analysis). For
    each it runs a live 8-sector radial trace, then renders that trace together
    with the cluster's spread-risk scenario and weather forecast into
    state.situation_summary. It does NOT rescan the grid for hotspots.

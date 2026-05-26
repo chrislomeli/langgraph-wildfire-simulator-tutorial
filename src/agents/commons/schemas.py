@@ -45,59 +45,70 @@ class TracedState(BaseModel):
     )
 
 
-# ── Spatial primitives ────────────────────────────────────────────────────────
-
-
-class Corner(BaseModel):
-    row: int
-    col: int
-
-
-class SpreadRegion(BaseModel):
-    upper_left_corner: Corner
-    lower_left_corner: Corner
-    upper_right_corner: Corner
-    lower_right_corner: Corner
-
-
 # ── Evaluation / Escalation ───────────────────────────────────────────────────
+
+
+class AxisFactors(BaseModel):
+    """Per-axis observations — scaffolding that forces explicit attention on every
+    dimension before the agent commits to a synthesis. Each field is an observation,
+    not a conclusion. The Evaluation.reasoning field is where conclusions are drawn."""
+
+    temperature_humidity: str = Field(
+        description=(
+            "Observed temperature and humidity readings. "
+            "Cite actual values and any thresholds crossed (e.g. >38°C, <15% RH)."
+        ),
+    )
+    wind: str = Field(
+        description=(
+            "Observed wind speed and direction. Note alignment with open fuel corridors "
+            "and flag if direction is shifting or inconsistent across nearby cells."
+        ),
+    )
+    fuel_and_terrain: str = Field(
+        description=(
+            "Terrain type, vegetation density, and fuel continuity. "
+            "Identify natural firebreaks (rock, water, road) or unbroken fuel runs."
+        ),
+    )
+    moisture_trend: str = Field(
+        description=(
+            "Fuel moisture reading and D-scenario classification (D1–D4). "
+            "Note recent precipitation and forecast precip probability."
+        ),
+    )
 
 
 class Evaluation(BaseModel):
     """Fire risk score for an individual cell."""
 
+    factors: AxisFactors = Field(
+        description="Per-axis observations. Populate all four before writing reasoning.",
+    )
+    reasoning: str = Field(
+        description=(
+            "Synthesis across all factors. Identify the decisive tradeoff(s): "
+            "which factors support escalation, which suppress it, and which tips the decision."
+        ),
+    )
     escalate: bool = Field(
         description="TRUE if there is adequate risk that the fire could ignite and spread to the point that we need to plan now"
-    )
-    ignition_risk: int = Field(
-        ge=0,
-        le=10,
-        description="The risk of a fire starting at the anchor cell ",
-    )
-    potential_spread_area: SpreadRegion | None = Field(
-        description="bounding box of a potential spread area expressed as (row,column) corners",
-        default=None,
-    )
-    confidence: int = Field(
-        ge=0,
-        le=3,
-        description="confidence in risk_score",
-    )
-    reasoning: list[str] = Field(
-        default_factory=list,
-        description="""What drove the assessment: e.g. ['temp=52°C (>38 threshold)',
-                    'humidity=12% (<15 critical)', 'terrain=grassland (high fuel)',,
-                    'fire has fuel and conditions to spread 10 cells to the NE""",
     )
 
 
 # ── Escalation ─────────────────────────────────────────────────────────
 class Escalation(Evaluation):
-    """Evaluation result anchored to a specific grid cell."""
+    """Evaluation result anchored to a specific grid cell.
+
+    scenario_text carries the radial sector analysis the cluster agent
+    used when making its decision — the logistics agent gets the same
+    spatial context without re-deriving it from the grid.
+    """
     sector_id: str
     row: int
     col: int
     layer: int
+    scenario_text: str = ""
 
 
 # ── EvaluationCell ─────────────────────────────────────────────────────────

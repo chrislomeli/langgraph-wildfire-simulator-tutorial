@@ -27,6 +27,7 @@ from agents.commons.schemas import Escalation, EvaluationCell
 from config import get_settings
 from evals.escalation.cases import EscalationCase
 from evals.escalation.dataset import ScenariosDataset
+from evals.escalation.escalation_evaluators import AllFieldsPresent
 from evals.escalation.task import EscalationTask
 from evals.framework.evaluators import BooleanVote, ReferenceJudge
 from evals.framework.judge import make_llm_judge
@@ -36,7 +37,18 @@ from prompts import PromptRegistry
 
 logging.basicConfig(level=logging.WARNING)
 
-DATASET_NAME = "escalation-golden-v2"
+# Domain-specific framing for the LLM judge — tells it what it is scoring so
+# its scoring decisions are grounded in fire-risk assessment context.
+_JUDGE_SYSTEM = """\
+You are an impartial evaluator scoring a fire-risk assessment agent's reasoning.
+You will be given evaluation criteria and the agent's four-axis reasoning to score.
+Respond with a single float between 0.0 and 1.0 — nothing else.
+  0.0 = reasoning does not meet the criteria at all
+  0.5 = reasoning partially meets the criteria
+  1.0 = reasoning fully meets the criteria\
+"""
+
+DATASET_NAME = "escalation-golden-v3"
 EXPERIMENT_PREFIX = "evaluate-node"
 REPEATS = 3
 
@@ -45,10 +57,10 @@ def main(seed_only: bool = False) -> None:
     settings = get_settings()
     settings.apply_langsmith()
 
-    client = Client()
+    langsmith_client = Client()
     dataset = ScenariosDataset()
 
-    dataset_id = seed_dataset(dataset, client=client, dataset_name=DATASET_NAME)
+    dataset_id = seed_dataset(dataset, client=langsmith_client, dataset_name=DATASET_NAME)
     print(f"Dataset '{DATASET_NAME}' ready (id={dataset_id})")
 
     if seed_only:
@@ -64,24 +76,27 @@ def main(seed_only: bool = False) -> None:
         llm_registry=llm_registry,
     )
 
-    judge = make_llm_judge(llm_registry.get("classifier"))
+    judge = make_llm_judge(llm_registry.get("classifier"), system_prompt=_JUDGE_SYSTEM)
 
     evaluators = [
         # Gate: did the model make the right escalation decision?
         # Cases where expect_escalate is None are skipped (ambiguous).
         BooleanVote(
             name="decision",
-            predict=lambda o: o.get("escalate", False) if isinstance(o, dict) else o.escalate,
+            predict=lambda o: o.escalate,
             expected=lambda x: x.get("expect_escalate"),
+        ),
+        # Gate: did the model fill in all the axis factors.
+        AllFieldsPresent(
+            name="factors",
+            predict=lambda o: o.factors
         ),
         # Rubric: did the model's reasoning satisfy the authored criteria?
         # Cases with no reasoning_criteria authored are skipped by make_llm_judge.
         ReferenceJudge(
             name="reasoning_quality",
             reference=lambda x: x.get("reasoning_criteria", ""),
-            actual=lambda o: "\n".join(
-                o.get("reasoning", []) if isinstance(o, dict) else o.reasoning
-            ),
+            actual=lambda o: o.reasoning,
             judge=judge,
             threshold=0.7,
         ),

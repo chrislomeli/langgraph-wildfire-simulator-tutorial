@@ -24,44 +24,6 @@
 <Instructions>
     Your mission is to evaluate an alert for the cell at ({{ row }} , {{ column }}) which has received updated readings.
 
-    # ignition_risk:
-        Assess the risk of a fire ignition in cell ({{ row }} , {{ column }}) using the provided EvaluationCell information that contains the latest readings
-        Use standard fire modeling methods to evaluate the readings and then provide a risk of ignition from 0 to 10
-
-        Apply fire-physics reasoning.
-
-        Factors that commonly increase fire danger include:
-        - Low relative humidity, especially below ~15%
-        - High temperature combined with low humidity
-        - Dry or abundant fuels
-        - Wind that promotes drying and spread
-        - Low fuel moisture
-        - Prolonged absence of precipitation
-        -
-
-          ## ignition_risk Risk Score Scale (0–10)
-          0–1  = Negligible: conditions do not support ignition
-          2–3  = Low: one or two mild risk factors
-          4–5  = Moderate: notable factors but not yet critical
-          6–7  = High: multiple elevated readings; fire possible with the right trigger
-          8–9  = Severe: critical thresholds breached; fire likely without intervention
-          10   = Extreme: all major factors at maximum; imminent danger
-
-    # potential_spread
-        Apply fire-physics reasoning.   ALWAYS build the bounding potential_spread_area taking terrain, weather and wind direction
-
-        Use your knowledge of fire spread models to reason about the likelihood of ignition and potential spread
-        The use the prevailing conditions supplied below to determine a bounding area where the fire could spread.  The area is defined by four corner cells
-
-        Project the spread all the way to a non-burning, but give some though to the width of the non-burning barrier - can a fire jump this barrier?
-        Assume that each cell is approximately a square mile
-        Assume that anything outside the grid boundaries is non-burning
-
-        example:
-            rectangle =  SpreadRegion(upper_left_corner=Corner(row=5, col=5),  upper_right_corner=Corner(row=5, col=10), lower_left_corner=Corner(row=6, col=5), lower_right_corner=Corner(row=6, col=15) )
-            creates a rectangle in the  ({{ max_rows }}, {{ max_columns }}) grid where the fire would likely spread if it ignited.
-            pay attention to NB (non-burning terrains such as rock, desert, water) that create natural boundaries and wind vectors, as well as weather conditions
-
     # escalate:
         Setting escalate to False means that the logistics agent will not evaluate
         Based on your evaluations you will decide whether this situation needs to be escalated to a logistics manager who will decide whether we have the equipment and manpower in place to handle the potential threat.
@@ -70,20 +32,31 @@
         We have resources to handle small fires (3 or 4 miles, where a cell is 1 square mile).  We are looking for situations where Is the potential for all of this large enough that there's a chance that we might need to prepare early
         This is a subjective evaluation so provide your detailed reasoning for your decision
 
-    # confidence
-      - Identify what data you have and what is missing
-      - Reconcile conflicting signals
-      - Identify both risk-increasing and risk-reducing factors
+    # factors — observe each axis before drawing conclusions (all four required)
 
-        Confidence uses a 0–3 scale:
-          0 = No confidence (insufficient data)
-          1 = Low confidence (major gaps)
-          2 = Medium confidence (most data present)
-          3 = High confidence (full coverage, strong signals)
+    ## factors.temperature_humidity
+        State the observed temperature and humidity readings.
+        Cite any thresholds crossed (e.g. temp > 38°C, RH < 15%).
 
-    # reasoning
-    ALWAYS include a line justifying WHY you decided to escalate (True)  or not (False)
-    EVERY METRIC SHOULD have a line in this reasoning so you can clearly communicate how each was evaluated
+    ## factors.wind
+        State wind speed and direction.
+        Note whether the wind aligns with open fuel corridors.
+        Flag if direction is shifting or inconsistent across nearby cells.
+
+    ## factors.fuel_and_terrain
+        Identify terrain type and vegetation density.
+        State whether fuel is continuous or interrupted by natural firebreaks.
+
+    ## factors.moisture_trend
+        State the fuel moisture reading and its D-scenario classification (D1–D4).
+        Note recent precipitation and forecast precip probability.
+
+    # reasoning — synthesise the factors into a decision argument (required)
+        Written AFTER the factors. This is your conclusion, not a summary.
+        Identify which factor(s) tip the decision and explain how opposing signals were weighed.
+        Example: "Despite dangerous temperature and wind, fuel moisture of 0.75 (D4) from recent
+        rain makes ignition unlikely — the moisture environment overrides the atmospheric danger."
+        If all factors align, state that clearly. If they conflict, name the override and why.
 
 </Instructions>
 

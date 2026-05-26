@@ -75,9 +75,8 @@ class LogisticsAgentState(TracedState):
     # ── Input (populated by supervisor before invoking this graph) ────────────
     situation_summary: str = ""
     # Escalated hotspots from the cluster agents. Each Escalation carries the
-    # anchor cell, ignition_risk, confidence, the reasoning that flagged it, and
-    # an estimated spread bounding box. The logistics agent assesses these — it
-    # does NOT rediscover hotspots by scanning the grid.
+    # anchor cell, reasoning, per-axis factors, and radial sector analysis.
+    # The logistics agent assesses these — it does NOT rediscover hotspots by scanning the grid.
     escalations: list[Escalation] = Field(default_factory=list)
     # Per-hotspot context computed upstream by the cluster agent, keyed by
     # (row, col, layer):

@@ -38,7 +38,7 @@ from langchain_core.messages import (
 from langgraph.graph import END
 
 from agents.commons.node_executor import node_executor
-from agents.commons.schemas import Colors, Escalation, SpreadRegion
+from agents.commons.schemas import Colors, Escalation
 from agents.commons.state_types import StatusValue
 from agents.logistics.state import LogisticsAgentState, LogisticsAssessment
 from llm.llm_registry import LLMRegistry
@@ -63,28 +63,12 @@ STUB_LOGISTICS = True
 #
 # The logistics LLM reasons over a text "situation summary". Per the chosen
 # design, each escalated hotspot is rendered with THREE complementary views:
-#   1. The escalation header — why the cluster agent flagged it (ignition_risk,
-#      confidence, reasoning) and its estimated spread bounding box.
+#   1. The escalation header — why the cluster agent flagged it (reasoning,
+#      per-axis factors) and the radial sector analysis.
 #   2. A live 8-sector radial trace of the grid (burnable_miles + barriers) —
 #      the settlement-in-path / natural-firebreak signal the advisory hinges on.
 #   3. The cluster's spread-risk scenario (per-direction ignition risk) and the
 #      weather forecast, both computed upstream and carried in logistics state.
-
-
-def _fmt_corner(c) -> str:
-    """Render a SpreadRegion Corner as (row, col)."""
-    return f"({c.row}, {c.col})"
-
-
-def _render_spread_box(box: SpreadRegion | None) -> str:
-    if box is None:
-        return "  (no spread-area estimate provided)"
-    return (
-        f"  corners (row,col): UL{_fmt_corner(box.upper_left_corner)} "
-        f"UR{_fmt_corner(box.upper_right_corner)} "
-        f"LL{_fmt_corner(box.lower_left_corner)} "
-        f"LR{_fmt_corner(box.lower_right_corner)}"
-    )
 
 
 def _render_forecast(briefing: dict | None, periods: int = 4) -> str:
@@ -112,12 +96,13 @@ def _render_hotspot_context(
 ) -> str:
     """Render one escalated hotspot into the rich combined situation block."""
     parts = [f"========== Hotspot ({escalation.row}, {escalation.col}) =========="]
-    if escalation.reasoning:
-        parts.append("Why the cluster agent escalated it:")
-        parts += [f"  - {r}" for r in escalation.reasoning]
-    parts.append("Estimated spread area (cluster bounding box):")
-    parts.append(_render_spread_box(escalation.potential_spread_area))
-    parts.append("")
+    parts.append("Cluster agent reasoning:")
+    parts.append(f"  {escalation.reasoning}")
+    parts.append("Factor observations:")
+    parts.append(f"  Temperature/Humidity : {escalation.factors.temperature_humidity}")
+    parts.append(f"  Wind                 : {escalation.factors.wind}")
+    parts.append(f"  Fuel & Terrain       : {escalation.factors.fuel_and_terrain}")
+    parts.append(f"  Moisture trend       : {escalation.factors.moisture_trend}")
     parts.append("Radial sector trace (live grid scan — burnable distance & barriers):")
     parts.append(hotspot.to_context_string())
     parts.append("")
@@ -134,10 +119,9 @@ def make_sector_analysis_node(
     """Factory: builds the logistics situation summary from the escalations.
 
     The cluster agents have already found and scored the hotspots. Each
-    ``Escalation`` carries an anchor cell, ignition_risk, confidence, the
-    reasoning that flagged it, and an estimated spread bounding box. This node
-    consumes those escalations directly — it does NOT rediscover hotspots by
-    scanning the grid (the old RiskView/grid-scan path is gone).
+    ``Escalation`` carries an anchor cell, reasoning, per-axis factors, and
+    the radial sector analysis. This node consumes those escalations directly —
+    it does NOT rediscover hotspots by scanning the grid (the old RiskView/grid-scan path is gone).
 
     For each escalated hotspot it builds a ``HotspotSectors`` via a live
     8-sector radial trace (burnable distance + barriers), then renders a rich
@@ -184,8 +168,6 @@ def make_sector_analysis_node(
             hotspot = HotspotSectors(
                 epicenter_row=row,
                 epicenter_col=col,
-                risk_score=esc.ignition_risk,
-                confidence=esc.confidence,
                 sectors=hotspot.sectors,
             )
             hotspots.append(hotspot)
@@ -197,10 +179,9 @@ def make_sector_analysis_node(
             context_parts.append("")
 
             logger.info(
-                "Hotspot at (%d, %d): ignition_risk=%d, 8 sectors traced, max_burnable=%.1f miles",
+                "Hotspot at (%d, %d): 8 sectors traced, max_burnable=%.1f miles",
                 row,
                 col,
-                esc.ignition_risk,
                 max(s.burnable_miles for s in hotspot.sectors),
             )
 
