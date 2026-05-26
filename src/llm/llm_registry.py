@@ -81,6 +81,10 @@ class LLMModel:
     # keyword args, so field order is free to change.
     key_label: str | None = None
     api_key: SecretStr | None = None
+    # USD per million tokens (public list price). None for providers where
+    # pricing is regional/variable (Bedrock) or free (Ollama).
+    price_per_1m_input: float | None = None
+    price_per_1m_output: float | None = None
 
 
 # ── Available model definitions ───────────────────────────────────────────────
@@ -88,32 +92,42 @@ class LLMModel:
 # key_label must match a field name on Settings.
 
 models: dict[LLMLabel, LLMModel | None] = {
-    # Anthropic
+    # Anthropic — prices are public list rates as of 2026-05 (per million tokens)
     LLMLabel.HAIKU: LLMModel(
         key_label="anthropic_api_key",
         provider=LLMProvider.ANTHROPIC,
         model="claude-haiku-4-5-20251001",
+        price_per_1m_input=0.80,
+        price_per_1m_output=4.00,
     ),
     LLMLabel.SONNET: LLMModel(
         key_label="anthropic_api_key",
         provider=LLMProvider.ANTHROPIC,
         model="claude-sonnet-4-6",
+        price_per_1m_input=3.00,
+        price_per_1m_output=15.00,
     ),
     LLMLabel.OPUS: LLMModel(
         key_label="anthropic_api_key",
         provider=LLMProvider.ANTHROPIC,
         model="claude-opus-4-7",
+        price_per_1m_input=15.00,
+        price_per_1m_output=75.00,
     ),
-    # OpenAI
+    # OpenAI — prices are public list rates as of 2026-05 (per million tokens)
     LLMLabel.GPT_MINI: LLMModel(
         key_label="openai_api_key",
         provider=LLMProvider.OPENAI,
         model="gpt-4o-mini",
+        price_per_1m_input=0.15,
+        price_per_1m_output=0.60,
     ),
     LLMLabel.GPT: LLMModel(
         key_label="openai_api_key",
         provider=LLMProvider.OPENAI,
         model="gpt-4o",
+        price_per_1m_input=2.50,
+        price_per_1m_output=10.00,
     ),
     # Ollama (local)
     LLMLabel.OLLAMA_LLAMA3: LLMModel(
@@ -182,9 +196,11 @@ class LLMRegistry:
         self,
         clients: dict[str, Any],
         callbacks: dict[str, TokenUsageCallback] | None = None,
+        providers: dict[str, LLMProvider] | None = None,
     ) -> None:
         self._clients = clients
         self._callbacks = callbacks or {}
+        self._providers = providers or {}
 
     def get(self, role: str, default: str | None = None) -> Any:
         client = self._clients.get(role, default)
@@ -196,8 +212,37 @@ class LLMRegistry:
     def roles(self) -> list[str]:
         return sorted(self._clients)
 
+    def make_system_message(self, role: str, text: str):
+        """Build a SystemMessage with provider-appropriate prompt-caching markup.
+
+        Anthropic: wraps text in a content block with cache_control so the
+        system prompt is cached after the first call — cache hits cost ~10%
+        of normal input price.
+
+        OpenAI / others: returns a plain SystemMessage. OpenAI applies
+        automatic prefix caching server-side with no client markup needed.
+        """
+        from langchain_core.messages import SystemMessage
+
+        if self._providers.get(role) == LLMProvider.ANTHROPIC:
+            return SystemMessage(content=[{
+                "type": "text",
+                "text": text,
+                "cache_control": {"type": "ephemeral"},
+            }])
+        return SystemMessage(text)
+
+    def reset_usage(self) -> None:
+        """Reset all per-role token counters to zero.
+
+        Call this before each eval run so usage_report() reflects only the
+        tokens consumed by that run, not the accumulated session total.
+        """
+        for cb in self._callbacks.values():
+            cb.reset()
+
     def usage_report(self) -> list[dict]:
-        """Return per-role token usage totals accumulated since registry was built."""
+        """Return per-role token usage totals since the last reset_usage() call."""
         return [cb.report() for cb in self._callbacks.values()]
 
 
@@ -302,6 +347,7 @@ def build_llm_registry(
     """
     clients: dict[str, Any] = {}
     callbacks: dict[str, TokenUsageCallback] = {}
+    providers: dict[str, LLMProvider] = {}
 
     for role, label in role_config.items():
         model_cfg = model_catalog.get(label)
@@ -310,10 +356,15 @@ def build_llm_registry(
             continue
 
         provider_kwargs = _resolve_provider_kwargs(model_cfg, settings)
-        callback = TokenUsageCallback(role)
+        callback = TokenUsageCallback(
+            role,
+            price_per_1m_input=model_cfg.price_per_1m_input,
+            price_per_1m_output=model_cfg.price_per_1m_output,
+        )
         chat_model = _build_chat_model(model_cfg, provider_kwargs, callback)
         clients[role] = chat_model
         callbacks[role] = callback
+        providers[role] = model_cfg.provider
         logger.info(
             "Registered LLM for role %r → %s (%s)",
             role,
@@ -321,4 +372,4 @@ def build_llm_registry(
             model_cfg.provider.value,
         )
 
-    return LLMRegistry(clients, callbacks)
+    return LLMRegistry(clients, callbacks, providers)

@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 import logging
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 from langgraph.store.base import BaseStore
 
 from agents.cluster.state import ClusterAgentState
@@ -232,7 +232,10 @@ async def call_evaluate_llm(
         llm = llm_registry.get("classifier")
         out = await llm.with_structured_output(
             Evaluation, method="function_calling", include_raw=True
-        ).ainvoke([SystemMessage(system_prompt), HumanMessage(human_prompt)])
+        ).ainvoke([
+            llm_registry.make_system_message("classifier", system_prompt),
+            HumanMessage(human_prompt),
+        ])
         evaluation = out.get("parsed")
         if evaluation is None:
             return None, 0

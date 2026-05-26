@@ -6,8 +6,8 @@ Each Case carries self-contained prompt inputs; no world engine is needed.
 
 from __future__ import annotations
 
-from evals.escalation.cases import CASES, EscalationCase
-from evals.framework.core import Case, DatasetSource
+from evals.escalation.cases import EscalationCase, build_cases
+from evals.framework.core import Case
 
 
 class ScenariosDataset:
@@ -20,7 +20,7 @@ class ScenariosDataset:
     version = "v2"
 
     def load(self) -> list[Case[EscalationCase, dict]]:
-        return [_to_case(c) for c in CASES]
+        return [_to_case(c) for c in build_cases()]
 
 
 def _to_case(c: EscalationCase) -> Case[EscalationCase, dict]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, Field
 
 from agents.commons.agent_dependencies import AgentDependencies
@@ -68,6 +69,9 @@ class AdvisoryController:
         self._prompt_registry.register_models(
             EvaluationCell, Evaluation, Escalation, LogisticsAssessment
         )
+        # MemorySaver for dev — swap for AsyncPostgresSaver in production.
+        # Lives on the controller so checkpoint data persists across requests.
+        self._checkpointer = MemorySaver()
 
     def _build_deps(self, engine: GenericWorldEngine) -> AgentDependencies:
         """Per-request deps: the shared registries + this request's world engine."""
@@ -94,9 +98,15 @@ class AdvisoryController:
         engine.set_tick(request.tick)
 
         deps = self._build_deps(engine)
-        supervisor_graph: SupervisorGraph = build_supervisor_graph(agent_dependencies=deps)
+        supervisor_graph: SupervisorGraph = build_supervisor_graph(
+            agent_dependencies=deps,
+            checkpointer=self._checkpointer,
+        )
 
-        result = await supervisor_graph.ainvoke(SupervisorState(updates=request.cells))
+        # thread_id scopes the checkpoint to this region+tick so retries resume
+        # from the last saved node rather than restarting from scratch.
+        config = {"configurable": {"thread_id": f"{request.region}-tick-{request.tick}"}}
+        result = await supervisor_graph.ainvoke(SupervisorState(updates=request.cells), config)
 
         return AdvisoryResult(
             escalations=result.get("escalations", []),

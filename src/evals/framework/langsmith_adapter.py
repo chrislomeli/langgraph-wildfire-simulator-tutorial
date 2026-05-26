@@ -47,12 +47,18 @@ def seed_dataset(
 ) -> str:
     """Push a DatasetSource into LangSmith as a named, versioned dataset.
 
-    Idempotent — skips creation if the dataset already exists. Returns the
-    dataset ID. Run this once before evaluating; re-run when golden data changes.
+    Idempotent — skips population if the dataset already contains examples.
+    Returns the dataset ID.
+
+    To reseed after changing golden cases: delete the dataset in the LangSmith
+    UI (or via client.delete_dataset()), then run with --seed-only again.
     """
     datasets = list(client.list_datasets(dataset_name=dataset_name))
     if datasets:
         dataset = datasets[0]
+        existing = list(client.list_examples(dataset_id=dataset.id, limit=1))
+        if existing:
+            return str(dataset.id)
     else:
         dataset = client.create_dataset(
             dataset_name,

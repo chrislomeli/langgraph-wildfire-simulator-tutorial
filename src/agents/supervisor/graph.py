@@ -56,15 +56,26 @@ from agents.supervisor.state import SupervisorGraph, SupervisorState
 logger = logging.getLogger(__name__)
 
 
-def build_supervisor_graph(*, agent_dependencies: AgentDependencies) -> SupervisorGraph:
+def build_supervisor_graph(
+    *,
+    agent_dependencies: AgentDependencies,
+    checkpointer=None,
+) -> SupervisorGraph:
     """Compile and return the supervisor graph.
 
     Parameters
     ──────────
-    agent_deps : AgentDependencies
+    agent_dependencies : AgentDependencies
         DI container with prompt_registry, llm_registry, and optional store.
         The cluster subgraph (built internally) receives these dependencies
         to render prompts, call LLMs, and persist findings.
+    checkpointer : BaseCheckpointSaver or None
+        Optional LangGraph checkpointer. When provided, supervisor state is
+        persisted after every node so runs can be resumed if the process
+        crashes mid-tick. Pass a thread_id in the invocation config to
+        identify which tick is being checkpointed.
+        Dev: MemorySaver (in-process, lost on restart).
+        Prod: AsyncPostgresSaver (shared DB, survives restarts).
     """
     cluster_graph = build_cluster_agent_graph(agent_deps=agent_dependencies)
     logistics_graph = build_logistics_agent_graph(agent_deps=agent_dependencies)
@@ -93,4 +104,4 @@ def build_supervisor_graph(*, agent_dependencies: AgentDependencies) -> Supervis
     builder.add_edge("run_logistics_agent", "dispatch_commands")
     builder.add_edge("dispatch_commands", END)
 
-    return SupervisorGraph(builder.compile())
+    return SupervisorGraph(builder.compile(checkpointer=checkpointer))

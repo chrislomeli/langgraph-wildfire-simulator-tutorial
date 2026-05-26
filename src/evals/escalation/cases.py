@@ -79,7 +79,14 @@ def _history(temp: float, humidity: float, wind_mps: float, wind_dir: str,
 
 # ── Cases ─────────────────────────────────────────────────────────────────────
 
-CASES: list[EscalationCase] = [
+def build_cases() -> list[EscalationCase]:
+    """Build and return the golden case list.
+
+    Called by ScenariosDataset.load() — not at import time. Each case carries
+    large strings (scenario_text, forecast, trend), so deferring construction
+    avoids paying that cost on every import.
+    """
+    return [
 
     EscalationCase(
         id="clear_extreme",
@@ -280,4 +287,4 @@ CASES: list[EscalationCase] = [
             "directional ambiguity is what to watch."
         ),
     ),
-]
+    ]

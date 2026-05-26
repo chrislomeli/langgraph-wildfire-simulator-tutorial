@@ -87,6 +87,10 @@ def main(seed_only: bool = False) -> None:
         ),
     ]
 
+    # Reset counters so usage_report() after the run reflects only this experiment,
+    # not any tokens consumed during setup (judge construction, dataset seeding, etc.).
+    llm_registry.reset_usage()
+
     print(f"Running eval: {EXPERIMENT_PREFIX} × {REPEATS} repetitions …")
     results = run_langsmith_eval(
         task=task,
@@ -98,6 +102,10 @@ def main(seed_only: bool = False) -> None:
         output_model=Escalation,
     )
     print(f"Done. View results at: {results.experiment_results_url}")
+    for row in llm_registry.usage_report():
+        cost = row["estimated_cost_usd"]
+        cost_str = f"  cost=${cost:.4f}" if cost is not None else ""
+        print(f"  [{row['role']}] calls={row['calls']}  tokens={row['total_tokens']} (in={row['input_tokens']} out={row['output_tokens']}){cost_str}")
 
 
 if __name__ == "__main__":

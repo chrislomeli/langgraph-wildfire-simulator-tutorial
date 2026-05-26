@@ -34,6 +34,8 @@ from langchain_core.outputs import LLMResult
 
 logger = logging.getLogger(__name__)
 
+_MAX_PENDING_TOOLS = 256
+
 
 class TokenUsageCallback(BaseCallbackHandler):
     """Logs token usage and tool call lifecycle for one LLM role.
@@ -43,12 +45,19 @@ class TokenUsageCallback(BaseCallbackHandler):
     single-threaded simulation loop.
     """
 
-    def __init__(self, role: str) -> None:
+    def __init__(
+        self,
+        role: str,
+        price_per_1m_input: float | None = None,
+        price_per_1m_output: float | None = None,
+    ) -> None:
         super().__init__()
         self.role = role
         self.total_input: int = 0
         self.total_output: int = 0
         self.call_count: int = 0
+        self._price_per_1m_input = price_per_1m_input
+        self._price_per_1m_output = price_per_1m_output
         self._tool_start_times: dict[UUID, float] = {}
 
     # ── LLM hook ──────────────────────────────────────────────────────────────
@@ -106,6 +115,16 @@ class TokenUsageCallback(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         tool_name = serialized.get("name", "unknown")
+        if len(self._tool_start_times) >= _MAX_PENDING_TOOLS:
+            oldest = next(iter(self._tool_start_times))
+            del self._tool_start_times[oldest]
+            logger.warning(
+                "[%s] _tool_start_times hit cap (%d); evicted oldest entry — "
+                "on_tool_end may not have fired for run_id=%s",
+                self.role,
+                _MAX_PENDING_TOOLS,
+                oldest,
+            )
         self._tool_start_times[run_id] = perf_counter()
         logger.info(
             "TOOL:: [%s] tool_start  name=%s run_id=%s args=%s ",
@@ -182,12 +201,23 @@ class TokenUsageCallback(BaseCallbackHandler):
 
     def report(self) -> dict:
         """Return a snapshot of usage totals for this role."""
+        if (
+            self._price_per_1m_input is not None
+            and self._price_per_1m_output is not None
+        ):
+            cost = (
+                self.total_input * self._price_per_1m_input
+                + self.total_output * self._price_per_1m_output
+            ) / 1_000_000
+        else:
+            cost = None
         return {
             "role": self.role,
             "calls": self.call_count,
             "input_tokens": self.total_input,
             "output_tokens": self.total_output,
             "total_tokens": self.total_input + self.total_output,
+            "estimated_cost_usd": cost,
         }
 
     def reset(self) -> None:
