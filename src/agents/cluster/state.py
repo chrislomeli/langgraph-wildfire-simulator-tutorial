@@ -7,9 +7,10 @@ What is a cluster agent?
 ────────────────────────
 One cluster agent runs per geographic/logical cluster of sensors.
 Its job is to:
-  1. Receive pre-collated records for its cluster (from the orchestrator).
-  2. Run the evaluate node to produce per-cell risk assessments.
-  3. Report assessments to the report_risk node, which persists them.
+  1. Receive the updated cell written upstream by CellStateManager.
+  2. Run apply_thresholds to gate on heuristic score, then gather_request_data
+     to assemble LLM context, then evaluate to produce an Escalation.
+  3. Pass the Escalation to report_risk.
 
 The cluster agent is a LangGraph subgraph — it has its own state schema
 that is separate from the supervisor's state. The supervisor maps
@@ -22,18 +23,17 @@ State design principles
 
 Node responsibilities
 ──────────────────────
-  evaluate    : Reads collated_records; produces escalations (one per
-                cell). Stub mode: deterministic placeholder scores. LLM mode:
-                single LLM call with structured output (enabled in next milestone).
-  report_risk : Persists escalations to the optional store and marks
-                the pipeline COMPLETED.
+  apply_thresholds  : Gates on heuristic score; produces selected_cell.
+  gather_request_data: Fetches bounding box, hotspot sectors, forecast/trend.
+  evaluate          : AI boundary. Stub mode returns deterministic scores;
+                      LLM mode calls the model with structured output.
+  report_risk       : Terminal node — marks the pipeline COMPLETED.
 """
 
 from __future__ import annotations
 
-import operator
 import uuid
-from typing import Annotated, NewType
+from typing import NewType
 
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import Field
@@ -61,6 +61,8 @@ class ClusterAgentState(TracedState):
     sector_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     anchor_row: int
     anchor_column: int
+    row_boundary: int | None = Field(default=None)
+    column_boundary:  int | None = Field(default=None)
     anchor_layer: int = Field(default=0)
 
     # ── Payloads ─────────────────────────────────────────────────
@@ -68,6 +70,7 @@ class ClusterAgentState(TracedState):
     selected_cell: EvaluationCell | None = Field(default=None)
     heuristic_score: int | None = Field(default=None)
     escalation: Escalation | None = Field(default=None)
-    evaluated: Annotated[dict, operator.or_] = Field(default_factory=dict)
-    briefing: Annotated[dict, operator.or_] = Field(default_factory=dict)
-    scenario: Annotated[dict, operator.or_] = Field(default_factory=dict)
+    evaluated: dict = Field(default_factory=dict)
+    forecast: dict | list = Field(default_factory=dict)
+    trend: dict | list = Field(default_factory=dict)
+    scenario_text: str | None = Field(default=None)

@@ -90,15 +90,15 @@ class HotspotSectors(BaseModel):
 
     epicenter_row: int
     epicenter_col: int
-    risk_score: int = Field(ge=0, le=10)
-    confidence: int = Field(ge=0, le=3)
+    # risk_score: int = Field(ge=0, le=10)
+    # confidence: int = Field(ge=0, le=3)
     sectors: list[SectorSummary] = Field(description="8 radial sector summaries")
 
     def to_context_string(self) -> str:
         """Human-readable summary suitable for inclusion in an LLM prompt."""
         lines = [
             f"Hotspot at ({self.epicenter_row}, {self.epicenter_col}): "
-            f"Risk={self.risk_score}/10, Confidence={self.confidence}/3",
+            # f"Risk={self.risk_score}/10, Confidence={self.confidence}/3",
             "Radial sector analysis:",
         ]
         for s in self.sectors:
@@ -154,7 +154,6 @@ _TERRAIN_STOP: dict[TerrainType, StopReason] = {
 
 
 # ── Grid traversal ────────────────────────────────────────────────────────────
-
 
 def trace_sector(
     grid,

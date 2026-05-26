@@ -272,8 +272,6 @@ class GenericWorldEngine(Generic[C]):
         return HotspotSectors(
             epicenter_row=row,
             epicenter_col=col,
-            risk_score=0,
-            confidence=0,
             sectors=sectors,
         )
 

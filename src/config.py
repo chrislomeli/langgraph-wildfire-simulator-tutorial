@@ -41,7 +41,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 logger = logging.getLogger(__name__)
 
 
-# ── Provider / label enums ────────────────────────────────────────────────────
+# ── LangSmith project identity ────────────────────────────────────────────────
+#
+# Defined in code, not in the environment. This is intentional: the project
+# name is a property of the application, not of the deployment. It is always
+# forced into the environment by apply_langsmith() regardless of what .env
+# or shell variables say.
+LANGSMITH_PROJECT = "wildfire-simulator"
 
 
 # ── Settings ──────────────────────────────────────────────────────────────────
@@ -63,11 +69,12 @@ class Settings(BaseSettings):
     aws_region: str | None = None
     aws_profile: str | None = None
 
-    # ── LangSmith / LangChain tracing ─────────────────────────────────────────
-    langchain_api_key: str = ""
-    langchain_tracing_v2: bool = False
-    langchain_project: str = "world-simulator"
-    langchain_endpoint: str = "https://api.smith.langchain.com"
+    # ── LangSmith tracing ─────────────────────────────────────────────────────
+    # Field names match the modern LANGSMITH_* env-var convention.
+    # Project name is NOT here — see LANGSMITH_PROJECT constant above.
+    langsmith_api_key: str = ""
+    langsmith_tracing: bool = False
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
 
     model_config = SettingsConfigDict(
         # env_file is intentionally NOT set at class-definition time —
@@ -79,16 +86,31 @@ class Settings(BaseSettings):
     )
 
     def apply_langsmith(self) -> None:
-        """Write LangSmith settings into os.environ so LangGraph picks them up."""
-        pairs = {
-            "LANGCHAIN_API_KEY": self.langchain_api_key,
-            "LANGCHAIN_TRACING_V2": "true" if self.langchain_tracing_v2 else "",
-            "LANGCHAIN_PROJECT": self.langchain_project,
-            "LANGCHAIN_ENDPOINT": self.langchain_endpoint,
-        }
-        for key, value in pairs.items():
+        """Write LangSmith settings into os.environ so LangGraph picks them up.
+
+        Sets both LANGSMITH_* (modern SDK) and LANGCHAIN_* (older LangGraph
+        tracing) so all library versions see the values.
+
+        - Credentials and endpoint: written only if not already in the environment
+          (real env takes priority over .env).
+        - Project name: always forced to the LANGSMITH_PROJECT constant —
+          code owns this value, not the environment.
+        """
+        tracing_value = "true" if self.langsmith_tracing else ""
+        # Credentials/config: environment wins if already set
+        for key, value in {
+            "LANGSMITH_API_KEY": self.langsmith_api_key,
+            "LANGSMITH_TRACING": tracing_value,
+            "LANGSMITH_ENDPOINT": self.langsmith_endpoint,
+            "LANGCHAIN_API_KEY": self.langsmith_api_key,
+            "LANGCHAIN_TRACING_V2": tracing_value,
+            "LANGCHAIN_ENDPOINT": self.langsmith_endpoint,
+        }.items():
             if value and not os.environ.get(key):
                 os.environ[key] = value
+        # Project: code always wins
+        os.environ["LANGSMITH_PROJECT"] = LANGSMITH_PROJECT
+        os.environ["LANGCHAIN_PROJECT"] = LANGSMITH_PROJECT
 
 
 def get_settings() -> Settings:

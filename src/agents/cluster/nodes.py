@@ -5,18 +5,18 @@ Node functions for the cluster agent's risk assessment pipeline.
 
 Pipeline shape
 ──────────────
-    START → update_world → evaluate → route_after_evaluate → report_risk → END
+    START → apply_thresholds → route_after_filter
+          → gather_request_data → evaluate → route_after_evaluate
+          → report_risk → END
 
-    update_world : Deterministic. Reads grid ground truth for each cell
-                   in state.readings (values were written upstream by
-                   CellStateManager.update) and produces cell snapshot
-                   dicts in state.updated_cells.
-    evaluate     : AI boundary. Stub mode returns deterministic placeholder
-                   risk scores. LLM mode calls the model with structured
-                   output. Both modes write CellRiskAssessment onto each
-                   evaluated cell so sector_analysis can find hotspots.
-    report_risk  : Terminal node. Persists CollatedRecordRisk records to
-                   the optional store and marks the pipeline COMPLETED.
+    apply_thresholds    : Deterministic gate. Computes heuristic score for the
+                          incoming cell; skips LLM path if score < threshold.
+    gather_request_data : Fetches grid bounds, hotspot-sector narrative, and
+                          weather forecast/trend for the evaluate node.
+    evaluate            : AI boundary. Stub mode returns deterministic scores;
+                          LLM mode calls the model with structured output.
+    report_risk         : Terminal node. Marks pipeline COMPLETED.
+                          (store persistence is a stub — not yet wired.)
 
 Design principles
 ─────────────────
@@ -46,6 +46,7 @@ from agents.commons.schemas import (
     Escalation,
     Evaluation,
     EvaluationCell,
+    EvaluatorLLMRequest,
     SpreadRegion,
 )
 from agents.commons.state_types import StatusValue
@@ -76,7 +77,7 @@ HEURISTIC_EVALUATE_THRESHOLD = 3
 
 # ── Node: update world ────────────────────────────────────────────────────────
 def make_apply_thresholds(
-    world_engine: GenericWorldEngine,
+        world_engine: GenericWorldEngine,
 ):
     """Factory for the apply_thresholds LangGraph node.
 
@@ -89,11 +90,12 @@ def make_apply_thresholds(
     if none of the qualifying cells can be resolved on the world grid.
     """
 
-    @node_executor("apply_thresholds")  # was "update_world" - name should match the function
+    @node_executor("apply_thresholds")
     def apply_thresholds(state: ClusterAgentState):
         uc: UpdatedCell = state.updated_cell
 
         updated_cell = world_engine.get_cell(uc.row, uc.col)
+
         if not updated_cell:
             logger.error(f"Coordinate cell {uc.model_dump_json()} does not exist ")
             return {
@@ -102,10 +104,10 @@ def make_apply_thresholds(
 
         f: FireCellState = updated_cell.cell_state
         factors = [
-            f.temperature_c > 32,
-            f.humidity_pct < 15,
-            f.vegetation < 0.50,
-            f.wind_speed_mps > 20,
+            f.temperature_c >= 15,
+            f.humidity_pct < 10,
+            f.vegetation > 0.1,
+            f.wind_speed_mps > 3,
         ]
         heuristic = round(sum(factors) / len(factors) * 10)
         if heuristic >= HEURISTIC_EVALUATE_THRESHOLD:
@@ -117,26 +119,164 @@ def make_apply_thresholds(
                 attributes=updated_cell.attributes,
             )
             return {
-                "heuristic_score": round(sum(factors) / len(factors) * 10),
+                "heuristic_score": heuristic,
                 "selected_cell": selected_cell,
                 "status": StatusValue.PROCESSING,
             }
         else:
             return {
-                "heuristic_score": round(sum(factors) / len(factors) * 10),
+                "heuristic_score": heuristic,
                 "status": StatusValue.COMPLETED,
             }
 
     return apply_thresholds
 
 
+# ── Node: gather request data ─────────────────────────────────────────────────
+def make_gather_request_data(
+        world_engine: GenericWorldEngine,
+):
+    """Factory for the gather_request_data LangGraph node.
+
+    Fetches the context the evaluate node needs: grid bounding box,
+    hotspot-sector narrative, weather forecast, and historical trend.
+    Writes directly into state; evaluate reads from there.
+    """
+
+    @node_executor("gather_request_data")
+    def gather_request_data(state: ClusterAgentState):
+        evaluate_cell: EvaluationCell = state.selected_cell
+        if not evaluate_cell:
+            logger.warning("ClusterAgent evaluate: no cells to evaluate")
+            return {
+                "escalation": None,
+                "status": StatusValue.COMPLETED,
+            }
+
+        row_boundary, column_boundary = world_engine.get_bounding()
+        row, col = evaluate_cell.row, evaluate_cell.col
+
+        # Short-range radial trace — burnable distance + barriers around anchor.
+        hotspot_sectors = world_engine.hotspot_sectors(row, col, max_miles=50.0)
+
+        # provide a weather forecast
+        briefing = world_engine.create_briefing(row, col)
+        forecast = briefing["forecast"]
+        trend = briefing["history"]
+        return {
+            "row_boundary": row_boundary,
+            "column_boundary": column_boundary,
+            "trend": trend,
+            "forecast": forecast,
+            "scenario_text": hotspot_sectors.to_context_string(),
+        }
+
+    return gather_request_data
+
+
 # ── Node: evaluate ────────────────────────────────────────────────────────────
 
 
-def make_evaluate_node(
+async def call_evaluate_llm(
+    llm_request: EvaluatorLLMRequest,
+    *,
     prompt_registry: PromptRegistry,
     llm_registry: LLMRegistry,
-    world_engine: GenericWorldEngine,
+    trial_only: bool = False,
+) -> tuple[Escalation | None, int]:
+    """Core LLM evaluation call shared by the cluster node and the eval harness.
+
+    Returns ``(Escalation, token_count)``.  token_count is 0 in trial mode.
+    Returns ``(None, 0)`` when the LLM fails to produce a parseable result.
+
+    Keeping this as a plain async function (not a factory closure) means the
+    eval harness can import and call it directly with the same prompt/model
+    path that the live graph uses.
+    """
+    evaluate_cell = llm_request.cell
+    row, col = evaluate_cell.row, evaluate_cell.col
+
+    system_prompt = prompt_registry.render(
+        "evaluate",
+        context=dict(
+            sector_id=llm_request.id,
+            max_rows=llm_request.max_rows,
+            max_columns=llm_request.max_cols,
+            row=row,
+            column=col,
+            scenario=llm_request.scenario_text,
+            trend=json.dumps(llm_request.trend, indent=2),
+            forecast=json.dumps(llm_request.forecast, indent=2),
+        ),
+    )
+    human_prompt = (
+        f"Readings for ANCHOR cell ({row},{col})\n"
+        + evaluate_cell.model_dump_json(indent=2)
+    )
+
+    if trial_only:
+        evaluation = Evaluation(
+            escalate=True,
+            ignition_risk=5,
+            potential_spread_area=SpreadRegion(
+                upper_left_corner=Corner(row=row, col=col),
+                upper_right_corner=Corner(row=row, col=col),
+                lower_left_corner=Corner(row=row, col=col),
+                lower_right_corner=Corner(row=row, col=col),
+            ),
+            confidence=3,
+            reasoning=["this is a dummy escalation"],
+        )
+        tokens = 0
+    else:
+        llm = llm_registry.get("classifier")
+        out = await llm.with_structured_output(
+            Evaluation, method="function_calling", include_raw=True
+        ).ainvoke([SystemMessage(system_prompt), HumanMessage(human_prompt)])
+        evaluation = out.get("parsed")
+        if evaluation is None:
+            return None, 0
+        raw = out.get("raw")
+        tokens = getattr(getattr(raw, "usage_metadata", None), "total_tokens", 0) or 0
+
+    escalation = Escalation(
+        row=evaluate_cell.row,
+        col=evaluate_cell.col,
+        layer=evaluate_cell.layer,
+        sector_id=llm_request.id,
+        **evaluation.model_dump(),
+    )
+    return escalation, tokens
+
+
+def make_call_evaluate_llm(
+    prompt_registry: PromptRegistry,
+    llm_registry: LLMRegistry,
+    trial_only: bool,
+):
+    """Wrap call_evaluate_llm as a state-dict-returning closure for the LangGraph node."""
+    async def _node_call(llm_request: EvaluatorLLMRequest) -> dict:
+        escalation, _ = await call_evaluate_llm(
+            llm_request,
+            prompt_registry=prompt_registry,
+            llm_registry=llm_registry,
+            trial_only=trial_only,
+        )
+        if escalation is None:
+            return {"escalation": None, "status": StatusValue.PROCESSING}
+        return {
+            "evaluated": llm_request.cell.state.model_dump(),
+            "escalation": escalation,
+            "status": StatusValue.PROCESSING,
+        }
+
+    return _node_call
+
+
+def make_evaluate_node(
+        prompt_registry: PromptRegistry,
+        llm_registry: LLMRegistry,
+        world_engine: GenericWorldEngine,
 ):
     """Factory that creates the evaluate node.
 
@@ -159,7 +299,7 @@ def make_evaluate_node(
     """
 
     @node_executor("evaluate")
-    async def evaluate(state: ClusterAgentState, max_concurrency: int = 3) -> dict:
+    async def evaluate(state: ClusterAgentState) -> dict:
         """Evaluate fire risk for every cell snapshot in this cluster.
 
         Stub mode (STUB_RISK_SCORE=True):
@@ -186,6 +326,7 @@ def make_evaluate_node(
           evaluated cell on the world grid.
 
         """
+        # get the cell we are evaluating
         evaluate_cell: EvaluationCell = state.selected_cell
         if not evaluate_cell:
             logger.warning("ClusterAgent evaluate: no cells to evaluate")
@@ -194,107 +335,37 @@ def make_evaluate_node(
                 "status": StatusValue.PROCESSING,
             }
 
-        max_rows, max_columns = world_engine.get_bounding()
-        row, col, layer = evaluate_cell.row, evaluate_cell.col, 0
-
-        # Short-range radial trace — burnable distance + barriers around anchor.
-        scenario = world_engine.hotspot_sectors(row, col, max_miles=1.0)
-
-        # provide a weather forecast
-        briefing = world_engine.create_briefing(row, col)
-        forecast = briefing["forecast"]
-        history = briefing["history"]
-
-        system_prompt = prompt_registry.render(
-            "evaluate",
-            context=dict(
-                sector_id=state.sector_id,
-                max_rows=max_rows,
-                max_columns=max_columns,
-                row=row,
-                column=col,
-                scenario=scenario.to_context_string(),
-                history=json.dumps(history, indent=2),
-                forecast=json.dumps(forecast, indent=2),
-            ),
-        )
-        human_prompt = (
-            f"Readings for ANCHOR cell ({evaluate_cell.row},{evaluate_cell.col})"
-            + evaluate_cell.model_dump_json(indent=2)
-        )
-
-        # Split on heuristic score — only call the LLM for cells that have at
-        # least one risk factor present. Cells below the threshold are assigned
-        # risk_score=0 with high confidence: the heuristic says nothing is there.
+        # console logging for development only
         if STUB_RISK_SCORE:
             print(f"""\n{Colors.YELLOW}● CALLING LLM STUB {Colors.RESET}""")
-            evaluation = Evaluation(
-                escalate=True,
-                ignition_risk=5,
-                potential_spread_area=SpreadRegion(
-                    upper_left_corner=Corner(row=row, col=col),
-                    upper_right_corner=Corner(row=row, col=col),
-                    lower_left_corner=Corner(row=row, col=col),
-                    lower_right_corner=Corner(row=row, col=col),
-                ),
-                confidence=3,
-                reasoning=["this is a dummy escalation"],
-            )
         else:
             print(f"""\n{Colors.BLUE}● CALLING LLM  {Colors.RESET}""")
-            llm = llm_registry.get("classifier")
-            # method="function_calling" instead of OpenAI's strict json_schema mode:
-            # SpreadRegion's tuple[int,int] corners render as JSON-schema arrays
-            # using prefixItems, which strict structured-output rejects ("array
-            # schema missing items"). Function calling accepts the tuple schema.
-            evaluation = await llm.with_structured_output(
-                Evaluation, method="function_calling"
-            ).ainvoke(
-                [
-                    SystemMessage(system_prompt),
-                    HumanMessage(human_prompt),
-                ]
-            )
 
-        escalation = Escalation(
-            row=evaluate_cell.row,
-            col=evaluate_cell.col,
-            layer=evaluate_cell.layer,
-            sector_id=state.sector_id,
-            **evaluation.model_dump(),
+        # create the input for the real worker
+        llm_request = EvaluatorLLMRequest(
+            cell=state.selected_cell,
+            id=state.sector_id,
+            max_rows=state.row_boundary,
+            max_cols=state.column_boundary,
+            scenario_text=state.scenario_text,
+            forecast=state.forecast,
+            trend=state.trend
         )
 
-        eval_dict = evaluate_cell.state.model_dump()
+        # create the llm caller function
+        llm_function = make_call_evaluate_llm(
+            prompt_registry=prompt_registry,
+            llm_registry=llm_registry,
+            trial_only=STUB_RISK_SCORE
+        )
 
-        if escalation.escalate:
-            print(
-                f"""\nPROMOTE:: {Colors.TEAL}{escalation.model_dump_json(indent=2)}{Colors.RESET}"""
-            )
-            return {
-                "evaluated": {(row, col, 0): eval_dict},
-                "briefing": {(row, col, layer): briefing},
-                "scenario": {(row, col, layer): scenario},
-                "escalation": escalation,
-                "status": StatusValue.PROCESSING,
-            }
-        else:
-            print(
-                f"""\n{Colors.YELLOW} DEFER:: {escalation.model_dump_json(indent=2)}{Colors.RESET}"""
-            )
-            return {
-                "evaluated": {(row, col, 0): eval_dict},
-                "briefing": {(row, col, layer): briefing},
-                "scenario": {(row, col, layer): scenario},
-                "escalation": escalation,
-                "status": StatusValue.PROCESSING,
-            }
+        # call the llm
+        return await llm_function(llm_request=llm_request)
 
     return evaluate
 
 
 # ── Node: report_risk ─────────────────────────────────────────────────────────
-
-
 def make_report_risk_node(world_engine: GenericWorldEngine, store: BaseStore | None = None):
     """Factory that creates the risk reporting node.
 
@@ -308,16 +379,10 @@ def make_report_risk_node(world_engine: GenericWorldEngine, store: BaseStore | N
 
     @node_executor("report_risk")
     def report_risk(state: ClusterAgentState) -> dict:
-        """Terminal node — persists risk assessments and marks pipeline complete.
+        """Terminal node — marks pipeline complete.
 
-        State reads
-        ───────────
-          - state.escalations : what to report
-          - state.sector_id      : for store namespace
-
-        State writes
-        ────────────
-          - status : COMPLETED
+        STUB: store persistence is not yet implemented.
+        state.escalation is available here when wiring is added.
         """
         return {"status": StatusValue.COMPLETED}
 
@@ -326,18 +391,18 @@ def make_report_risk_node(world_engine: GenericWorldEngine, store: BaseStore | N
 
 # ── Routers ──────────────────────────────────────────────────────────────────
 def route_after_filter(state: ClusterAgentState) -> str:
-    """Conditional edge router after evaluate node.
+    """Conditional edge router after apply_thresholds.
 
     Delegates to route_base:
       - status == ERROR     → END
-      - status == COMPLETED → END
-      - otherwise           → "report_risk"
+      - status == COMPLETED → END  (cell below threshold, skip LLM)
+      - otherwise           → "gather_request_data"
     """
-    return route_base(state, next_node="evaluate")
+    return route_base(state, next_node="gather_request_data")
 
 
 def route_after_evaluate(state: ClusterAgentState) -> str:
-    """Conditional edge router after evaluate node.
+    """Conditional edge router after evaluate.
 
     Delegates to route_base:
       - status == ERROR     → END

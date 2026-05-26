@@ -91,21 +91,30 @@ class Evaluation(BaseModel):
     )
 
 
+# ── Escalation ─────────────────────────────────────────────────────────
 class Escalation(Evaluation):
     """Evaluation result anchored to a specific grid cell."""
-
     sector_id: str
     row: int
     col: int
     layer: int
 
 
-# ── Cluster agent I/O ─────────────────────────────────────────────────────────
-
-
+# ── EvaluationCell ─────────────────────────────────────────────────────────
 class EvaluationCell(BaseModel):
     row: int
     col: int
     layer: int
     attributes: dict
     state: FireCellState
+
+
+# ── Cluster agent I/O ─────────────────────────────────────────────────────────
+class EvaluatorLLMRequest(BaseModel):
+    id: str
+    cell: EvaluationCell
+    scenario_text: str
+    forecast: dict | list  # dict = production NWS envelope; list = eval flat periods
+    trend: dict | list     # dict = production NWS envelope; list = eval flat periods
+    max_rows: int = 0
+    max_cols: int = 0

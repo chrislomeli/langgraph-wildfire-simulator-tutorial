@@ -5,8 +5,9 @@ Cluster agent LangGraph subgraph.
 
 Topology
 ────────
-    START → ingest_events → evaluate → route_after_classify
-          → report_findings → END
+    START → apply_thresholds → route_after_filter
+          → gather_request_data → evaluate → route_after_evaluate
+          → report_risk → END
 
 Construction
 ────────────
@@ -27,6 +28,7 @@ from langgraph.graph import END, START, StateGraph
 from agents.cluster.nodes import (
     make_apply_thresholds,
     make_evaluate_node,
+    make_gather_request_data,
     make_report_risk_node,
     route_after_evaluate,
     route_after_filter,
@@ -38,39 +40,35 @@ logger = logging.getLogger(__name__)
 
 
 def build_cluster_agent_graph(
-    *,
-    agent_deps: AgentDependencies,
+        *,
+        agent_deps: AgentDependencies,
 ) -> StreamingRiskGraph:
-    """Compile the streaming-risk variant of the cluster subgraph.
+    """Compile the cluster agent subgraph.
 
     Topology
     ────────
-        START → evaluate → route_after_evaluate → report_risk → END
-
-    Notably **does not** include the `collate` node. This variant
-    expects the caller (the runtime orchestrator) to pre-populate
-    ``state.collated_records`` from a streaming collator
-    (``CellStateManager``). Including ``collate`` would overwrite
-    those records — see docs/runtime-orchestrator.md § Verified facts.
-
-    Use ``build_cluster_agent_graph`` for the demo path that consumes
-    raw ``SensorEvent``s in batch.
+        START → apply_thresholds → route_after_filter
+              → gather_request_data → evaluate → route_after_evaluate
+              → report_risk → END
 
     Parameters
     ──────────
     agent_deps : AgentDependencies
         DI container with prompt_registry, llm_registry, and optional
         store. The evaluate node uses prompt_registry for the system
-        prompt and llm_registry for model lookup. report_risk uses
-        store to persist RiskAssessment records.
+        prompt and llm_registry for model lookup.
     """
     builder = StateGraph(ClusterAgentState)
 
     builder.add_node(
-        "update_world",
+        "apply_thresholds",
         make_apply_thresholds(
             world_engine=agent_deps.world_engine,
         ),
+    )
+    builder.add_node(
+        "gather_request_data",
+        make_gather_request_data(world_engine=agent_deps.world_engine),
     )
 
     builder.add_node(
@@ -86,8 +84,9 @@ def build_cluster_agent_graph(
         make_report_risk_node(world_engine=agent_deps.world_engine, store=agent_deps.store),
     )
 
-    builder.add_edge(START, "update_world")
-    builder.add_conditional_edges("update_world", route_after_filter)
+    builder.add_edge(START, "apply_thresholds")
+    builder.add_conditional_edges("apply_thresholds", route_after_filter)
+    builder.add_edge("gather_request_data", "evaluate")
     builder.add_conditional_edges("evaluate", route_after_evaluate)
     builder.add_edge("report_risk", END)
 

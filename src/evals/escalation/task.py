@@ -1,87 +1,40 @@
 """evals.escalation.task — EscalationTask: system-under-test adapter.
 
-Wraps the evaluate node's LLM path as a Task[EscalationCase, Escalation].
-All prompt context (sector summary, forecast, history) is carried by the
-EscalationCase — no world engine, no DB, no grid required at eval time.
+Proxies directly to call_evaluate_llm() in the cluster node so the eval
+runs the exact same prompt-render + LLM path as the live graph.
 
 The only dependencies are PromptRegistry and the 'classifier' LLM.
+No world engine, DB, or grid is required at eval time — all context is
+pre-built inside each EscalationCase.
 """
 
 from __future__ import annotations
 
-import json
-
-from langchain_core.messages import HumanMessage, SystemMessage
-
-from agents.commons.schemas import Escalation, Evaluation
+from agents.cluster.nodes import call_evaluate_llm
+from agents.commons.schemas import Escalation
 from evals.escalation.cases import EscalationCase
-from evals.framework.core import Task, Usage
-from llm.llm_registry import LLMRegistry
-from prompts import PromptRegistry
+from evals.framework.core import Usage
 
 
 class EscalationTask:
-    """Task[EscalationCase, Escalation] — runs one authored case through the evaluate LLM.
-
-    Mirrors make_evaluate_node's LLM path exactly (same prompt template, same
-    structured-output call), but takes pre-built context from the case rather
-    than deriving it from the world engine.
-    """
+    """Task[EscalationCase, Escalation] — runs one authored case through the evaluate LLM."""
 
     def __init__(
         self,
         *,
-        prompt_registry: PromptRegistry,
-        llm_registry: LLMRegistry,
+        prompt_registry,
+        llm_registry,
         prompt_version: str = "v1",
     ) -> None:
         self.label = f"evaluate-node/{prompt_version}"
-        self._prompts = prompt_registry
-        llm = llm_registry.get("classifier")
-        self._structured = llm.with_structured_output(
-            Evaluation, method="function_calling", include_raw=True
-        )
+        self._prompt_registry = prompt_registry
+        self._llm_registry = llm_registry
 
     async def run(self, case: EscalationCase) -> tuple[Escalation | None, Usage]:
-        row, col = case.cell.row, case.cell.col
-
-        system_prompt = self._prompts.render(
-            "evaluate",
-            context=dict(
-                sector_id=case.id,
-                max_rows=case.max_rows,
-                max_columns=case.max_cols,
-                row=row,
-                column=col,
-                scenario=case.scenario_text,
-                history=json.dumps(case.history, indent=2),
-                forecast=json.dumps(case.forecast, indent=2),
-            ),
-        )
-        human_prompt = (
-            f"Readings for ANCHOR cell ({row},{col})\n"
-            + case.cell.model_dump_json(indent=2)
-        )
-
-        try:
-            out = await self._structured.ainvoke(
-                [SystemMessage(system_prompt), HumanMessage(human_prompt)]
-            )
-        except Exception:
-            return None, Usage()
-
-        evaluation: Evaluation | None = out.get("parsed")
-        if evaluation is None:
-            return None, Usage()
-
-        raw = out.get("raw")
-        tokens = getattr(getattr(raw, "usage_metadata", None), "total_tokens", 0) or 0
-
-        escalation = Escalation(
-            row=row,
-            col=col,
-            layer=case.cell.layer,
-            sector_id=case.id,
-            **evaluation.model_dump(),
+        escalation, tokens = await call_evaluate_llm(
+            case,
+            prompt_registry=self._prompt_registry,
+            llm_registry=self._llm_registry,
+            trial_only=False,
         )
         return escalation, Usage(total_tokens=tokens)

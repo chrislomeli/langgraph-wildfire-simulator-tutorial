@@ -18,6 +18,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from langsmith import EvaluationResult
+from langsmith.evaluation import EvaluationResults
+
 from evals.framework.core import Case, CaseExecution, DatasetSource, Evaluator, Sample, Task, Usage
 
 
@@ -102,7 +105,7 @@ def make_evaluator(evaluator: Evaluator, *, output_model=None, expected_key: str
     existing Evaluator implementations work unchanged.
     """
 
-    def ls_evaluator(run, example) -> list[dict]:
+    def ls_evaluator(run, example) -> EvaluationResults:
         raw_output = (run.outputs or {}).get("result")
         raw_expected = (example.outputs or {}).get(expected_key)
 
@@ -118,7 +121,10 @@ def make_evaluator(evaluator: Evaluator, *, output_model=None, expected_key: str
         )
 
         scores = evaluator.evaluate(execution)
-        return [{"key": s.name, "score": s.value, "comment": s.detail} for s in scores]
+        return EvaluationResults(results=[
+            EvaluationResult(key=s.name, score=s.value, comment=s.detail)
+            for s in scores
+        ])
 
     ls_evaluator.__name__ = evaluator.name
     return ls_evaluator
@@ -142,6 +148,14 @@ def run_langsmith_eval(
 
     Results, per-case scores, and run history are visible in the LangSmith
     dashboard. Regression detection is available via the Experiments view.
+    :param output_model:
+    :param input_model:
+    :param max_concurrency:
+    :param task:
+    :param num_repetitions:
+    :param dataset_name:
+    :param evaluators:
+    :type experiment_prefix: str
     """
     from langsmith import evaluate
 

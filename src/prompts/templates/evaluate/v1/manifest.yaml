@@ -6,7 +6,7 @@ required_vars:
   - max_rows
   - max_columns
   - scenario
-  - history
+  - trend
   - forecast
 
 
