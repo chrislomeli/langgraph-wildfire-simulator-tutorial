@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 # True = no LLM, no tool calls, returns stub plan immediately.
 # Flip to False once the prompt and LLM are wired in.
 
-STUB_LOGISTICS = True
+STUB_LOGISTICS = False
 
 #
 # # ── Hotspot context rendering ───────────────────────────────────────────────────

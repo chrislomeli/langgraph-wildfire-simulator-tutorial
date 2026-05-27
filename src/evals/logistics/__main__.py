@@ -112,7 +112,7 @@ def main(seed_only: bool = False) -> None:
         input_model=LogisticsCase,
         output_model=LogisticsAssessment,
     )
-    print(f"Done. View results at: {results.experiment_results_url}")
+    print("Done.")
     for row in llm_registry.usage_report():
         cost = row["estimated_cost_usd"]
         cost_str = f"  cost=${cost:.4f}" if cost is not None else ""

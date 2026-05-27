@@ -15,8 +15,6 @@ Dependencies deliberately minimal:
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import MagicMock
-
 from agents.commons.agent_dependencies import AgentDependencies
 from agents.logistics.graph import build_logistics_agent_graph
 from agents.logistics.state import LogisticsAgentState, LogisticsAssessment
@@ -35,11 +33,13 @@ class LogisticsTask:
         prompt_version: str = "v1",
     ) -> None:
         self.label = f"logistics-graph/{prompt_version}"
-        deps = AgentDependencies(
+        # model_construct bypasses Pydantic's isinstance check on world_engine.
+        # Safe because sector_analysis is disabled and the engine is never accessed.
+        deps = AgentDependencies.model_construct(
             llm_registry=llm_registry,
             prompt_registry=prompt_registry,
-            world_engine=MagicMock(),  # sector_analysis disabled; never accessed
-            data_store=None,           # no DB writes; tools skipped gracefully
+            world_engine=None,
+            data_store=None,
         )
         self._graph = build_logistics_agent_graph(agent_deps=deps)
 
