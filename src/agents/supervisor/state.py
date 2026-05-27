@@ -63,10 +63,12 @@ class SupervisorState(TracedState):
 
     # ── Input ────────────────────────────────────────────────────────
     updates: list[UpdatedCell] = Field(default_factory=list)
-    escalations: Annotated[list[Escalation], operator.add] = Field(default_factory=list)
-    briefings: Annotated[dict, operator.or_] = Field(default_factory=dict)
-    scenarios: Annotated[dict, operator.or_] = Field(default_factory=dict)
-    evaluated: Annotated[dict, operator.or_] = Field(default_factory=dict)
+    # escalations: Annotated[list[Escalation], operator.add] = Field(default_factory=list)
+
+    evaluations: Annotated[dict, operator.or_] = Field(default_factory=dict)
+    escalations: list[dict] = Field(default_factory=list)
+    # scenarios: Annotated[dict, operator.or_] = Field(default_factory=dict)
+    # evaluated: Annotated[dict, operator.or_] = Field(default_factory=dict)
 
     # ── LLM reasoning (reserved for when the LLM is wired in) ────────
     messages: Annotated[list[BaseMessage], add_messages] = Field(default_factory=list)

@@ -52,7 +52,7 @@ from agents.commons.state_types import StatusValue
 from controllers.schemas import UpdatedCell
 from llm.llm_registry import LLMRegistry
 from prompts import PromptRegistry
-from world import GenericWorldEngine
+from world import GenericWorldEngine, HotspotSectors
 from world.domains.wildfire import FireCellState
 
 logger = logging.getLogger(__name__)
@@ -156,7 +156,7 @@ def make_gather_request_data(
         row, col = evaluate_cell.row, evaluate_cell.col
 
         # Short-range radial trace — burnable distance + barriers around anchor.
-        hotspot_sectors = world_engine.hotspot_sectors(row, col, max_miles=50.0)
+        hotspot_sectors: HotspotSectors = world_engine.hotspot_sectors(row, col, max_miles=50.0)
 
         # provide a weather forecast
         briefing = world_engine.create_briefing(row, col)
@@ -167,7 +167,7 @@ def make_gather_request_data(
             "column_boundary": column_boundary,
             "trend": trend,
             "forecast": forecast,
-            "scenario_text": hotspot_sectors.to_context_string(),
+            "scenario": hotspot_sectors.model_dump(),
         }
 
     return gather_request_data
@@ -203,7 +203,7 @@ async def call_evaluate_llm(
             max_columns=llm_request.max_cols,
             row=row,
             column=col,
-            scenario=llm_request.scenario_text,
+            scenario=llm_request.scenario,
             trend=json.dumps(llm_request.trend, indent=2),
             forecast=json.dumps(llm_request.forecast, indent=2),
         ),
@@ -244,7 +244,6 @@ async def call_evaluate_llm(
         col=evaluate_cell.col,
         layer=evaluate_cell.layer,
         sector_id=llm_request.id,
-        scenario_text=llm_request.scenario_text,
         **evaluation.model_dump(),
     )
     return escalation, tokens
@@ -350,7 +349,7 @@ def make_evaluate_node(
             id=state.sector_id,
             max_rows=state.row_boundary,
             max_cols=state.column_boundary,
-            scenario_text=state.scenario_text,
+            scenario=state.scenario,
             forecast=state.forecast,
             trend=state.trend
         )

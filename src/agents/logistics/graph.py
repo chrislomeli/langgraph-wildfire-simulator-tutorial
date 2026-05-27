@@ -49,7 +49,6 @@ from agents.commons.agent_dependencies import AgentDependencies
 from agents.logistics.nodes import (
     make_extract_plan_node,
     make_logistics_agent_node,
-    make_sector_analysis_node,
     route_after_logistics_agent,
 )
 from agents.logistics.state import LogisticsAgentState, LogisticsGraph
@@ -74,25 +73,26 @@ def build_logistics_agent_graph(*, agent_deps: AgentDependencies) -> LogisticsGr
 
     builder = StateGraph(LogisticsAgentState)
 
-    builder.add_node(
-        "sector_analysis",
-        make_sector_analysis_node(
-            world=agent_deps.world_engine, risk_threshold=5, max_sector_miles=20.0
-        ),
-    )
+    # builder.add_node(
+    #     "sector_analysis",
+    #     make_sector_analysis_node(
+    #         world=agent_deps.world_engine, risk_threshold=5, max_sector_miles=20.0
+    #     ),
+    # )
+    advisory_repo = agent_deps.data_store.advisories if agent_deps.data_store is not None else None
+
     builder.add_node(
         "logistics_agent",
         make_logistics_agent_node(tools, agent_deps.prompt_registry, agent_deps.llm_registry),
     )
     builder.add_node("tools", ToolNode(tools))
-    advisory_repo = agent_deps.data_store.advisories if agent_deps.data_store is not None else None
+
     builder.add_node(
         "extract_plan",
         make_extract_plan_node(agent_deps.prompt_registry, agent_deps.llm_registry, advisory_repo),
     )
 
-    builder.add_edge(START, "sector_analysis")
-    builder.add_edge("sector_analysis", "logistics_agent")
+    builder.add_edge(START, "logistics_agent")
     builder.add_conditional_edges(
         "logistics_agent",
         route_after_logistics_agent,

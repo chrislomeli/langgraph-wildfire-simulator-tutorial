@@ -77,13 +77,7 @@ class LogisticsAgentState(TracedState):
     # Escalated hotspots from the cluster agents. Each Escalation carries the
     # anchor cell, reasoning, per-axis factors, and radial sector analysis.
     # The logistics agent assesses these — it does NOT rediscover hotspots by scanning the grid.
-    escalations: list[Escalation] = Field(default_factory=list)
-    # Per-hotspot context computed upstream by the cluster agent, keyed by
-    # (row, col, layer):
-    #   scenarios : short-range radial trace from cluster (engine.hotspot_sectors)
-    #   briefings : NWS-style weather history + forecast (engine.create_briefing)
-    scenarios: dict = Field(default_factory=dict)
-    briefings: dict = Field(default_factory=dict)
+    escalations: list[dict] = Field(default_factory=list)
 
     # ── Written by sector_analysis node ──────────────────────────────────────
     sector_analysis: list[dict] = Field(default_factory=list)

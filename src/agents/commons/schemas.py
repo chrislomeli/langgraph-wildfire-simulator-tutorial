@@ -108,7 +108,6 @@ class Escalation(Evaluation):
     row: int
     col: int
     layer: int
-    scenario_text: str = ""
 
 
 # ── EvaluationCell ─────────────────────────────────────────────────────────
@@ -124,7 +123,7 @@ class EvaluationCell(BaseModel):
 class EvaluatorLLMRequest(BaseModel):
     id: str
     cell: EvaluationCell
-    scenario_text: str
+    scenario: dict
     forecast: dict | list  # dict = production NWS envelope; list = eval flat periods
     trend: dict | list     # dict = production NWS envelope; list = eval flat periods
     max_rows: int = 0

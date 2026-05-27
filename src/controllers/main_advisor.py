@@ -140,7 +140,7 @@ if __name__ == "__main__":
         "tick": 29,
         "timestamp": "2026-05-21T04:56:24.118478",
         "cells": [
-            # {"row": 5, "col": 5, "layer": 0},
+            {"row": 5, "col": 5, "layer": 0},
             {"row": 25, "col": 25, "layer": 0},
         ],
     }

@@ -17,7 +17,7 @@ class ScenariosDataset:
     traceable to the dataset version they scored.
     """
 
-    version = "v3"
+    version = "v4"
 
     def load(self) -> list[Case[EscalationCase, dict]]:
         return [_to_case(c) for c in build_cases()]

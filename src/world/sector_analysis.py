@@ -67,7 +67,7 @@ StopReason = Literal[
 class SectorSummary(BaseModel):
     """Radial sector analysis from a fire hotspot."""
 
-    direction: Direction = Field(description="Cardinal direction of this sector")
+    direction: str = Field(description="Cardinal direction of this sector")
     burnable_miles: float = Field(
         description="Continuous burnable distance from the hotspot in this direction"
     )
@@ -79,10 +79,10 @@ class SectorSummary(BaseModel):
     )
     avg_vegetation: float = Field(ge=0, le=1, description="Mean vegetation density")
     avg_fuel_moisture: float = Field(ge=0, le=1, description="Mean fuel moisture")
-    avg_slope: float = Field(description="Mean slope in degrees")
-    max_fire_intensity: float = Field(ge=0, le=1, description="Maximum fire intensity in sector")
+    # avg_slope: float = Field(description="Mean slope in degrees")
+    # max_fire_intensity: float = Field(ge=0, le=1, description="Maximum fire intensity in sector")
     wind_aligned: bool = Field(description="True if sector direction matches wind direction")
-    cells_in_sector: int = Field(description="Number of cells scanned in this sector")
+    # cells_in_sector: int = Field(description="Number of cells scanned in this sector")
 
 
 class HotspotSectors(BaseModel):
@@ -218,36 +218,30 @@ def analyze_sector(
         # Sector blocked immediately — the adjacent cell was already a
         # barrier or off-grid. stop_reason still carries the signal.
         return SectorSummary(
-            direction=sector,
-            burnable_miles=0.0,
+            direction=str(sector),
             stop_reason=stop_reason,
             avg_vegetation=0.0,
             avg_fuel_moisture=1.0,
-            avg_slope=0.0,
-            max_fire_intensity=0.0,
             wind_aligned=is_wind_aligned(wind_dir_deg, SECTOR_ANGLES[sector]),
-            cells_in_sector=0,
         )
 
     n = len(cells)
     avg_veg = sum(c.cell_state.vegetation for c in cells) / n
     avg_moisture = sum(c.cell_state.fuel_moisture for c in cells) / n
-    avg_slope = sum(c.cell_state.slope for c in cells) / n
-    max_intensity = max((c.cell_state.fire_intensity for c in cells), default=0.0)
 
     cell_size_miles = cell_size_ft / 5280.0
     burnable_miles = n * cell_size_miles
 
     return SectorSummary(
-        direction=sector,
+        direction=str(sector),
         burnable_miles=burnable_miles,
         stop_reason=stop_reason,
         avg_vegetation=avg_veg,
         avg_fuel_moisture=avg_moisture,
-        avg_slope=avg_slope,
-        max_fire_intensity=max_intensity,
+        # avg_slope=avg_slope,
+        # max_fire_intensity=max_intensity,
         wind_aligned=is_wind_aligned(wind_dir_deg, SECTOR_ANGLES[sector]),
-        cells_in_sector=n,
+        # cells_in_sector=n,
     )
 
 

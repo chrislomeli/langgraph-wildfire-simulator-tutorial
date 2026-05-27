@@ -16,7 +16,7 @@ subgraph, a LangGraph ``BaseStore``) are exposed as ``make_*``
 factories so the graph builder can thread dependencies in at compile
 time. This keeps the module free of side effects at import time.
 """
-
+import json
 import logging
 
 from langgraph.graph.state import CompiledStateGraph
@@ -24,6 +24,7 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Send
 
 from agents.cluster.state import ClusterAgentState
+from agents.commons import route_base
 from agents.commons.node_executor import node_executor
 from agents.commons.state_types import StatusValue
 from agents.logistics.state import LogisticsAgentState
@@ -98,11 +99,14 @@ def make_run_cluster_agent(cluster_graph: CompiledStateGraph):
         # evaluate, so escalation/briefing/scenario are never written. Use .get
         # so those clusters contribute nothing rather than raising KeyError.
         escalation = result.get("escalation")
+        row, col = escalation.row, escalation.col
+        hotspot = dict(
+            escalation= escalation.model_dump(),
+            scenario=result.get("scenario", {}),
+            # forcast=result.get("forecast", {}),
+        )
         return {
-            "evaluated": result.get("evaluated", {}),
-            "briefings": result.get("briefing", {}),
-            "scenarios": result.get("scenario", {}),
-            "escalations": [escalation] if escalation else [],
+            "evaluations": {f"({row},{col})": hotspot},
         }
 
     return run_cluster_agent
@@ -119,17 +123,28 @@ def assess_situation(state: SupervisorState) -> dict:
     Store, call an LLM to correlate findings across clusters, and detect
     cross-cluster patterns (e.g. one large event vs many isolated ones).
     """
-    escalations = state.escalations
-    escalated = [e for e in escalations if e.escalate]
+    escalated = []
+    evaluated_records = state.evaluations
+    for _, record in evaluated_records.items():
+        if escalation_record := record.get("escalation", None):
+            if escalation_record.get("escalate"):
+                escalated.append(dict(
+                    escalation=escalation_record,
+                    scenario=record.get("scenario", "")
+                ))
 
-    summary = f"[STUB] {len(escalated)} of {len(escalations)} sector(s) flagged for escalation."
-    if escalated:
-        summary += " Escalating: " + ", ".join(e.sector_id for e in escalated) + "."
-
-    return {
-        "situation_summary": summary,
-        "status": StatusValue.PROCESSING,
-    }
+    if len(escalated):
+        summary = f" {evaluated_records} sector(s) flagged for escalation."
+        return {
+            "escalations": escalated,
+            "situation_summary": summary,
+            "status": StatusValue.PROCESSING,
+        }
+    else:
+         return {
+            "situation_summary": "no escalations found",
+            "status": StatusValue.COMPLETED,
+        }
 
 
 def make_run_logistics_agent(logistics_graph: CompiledStateGraph):
@@ -145,12 +160,10 @@ def make_run_logistics_agent(logistics_graph: CompiledStateGraph):
         # Hand the logistics agent the hotspots the cluster agents already found
         # and escalated — anchor, reasoning, per-axis factors, and radial sector
         # analysis — plus the per-hotspot scenario/briefing context.
-        escalated = [e for e in state.escalations if e.escalate]
+        escalations = state.escalations
         logistics_state = LogisticsAgentState(
             situation_summary=state.situation_summary or "",
-            escalations=escalated,
-            scenarios=state.scenarios,
-            briefings=state.briefings,
+            escalations=escalations,
         )
         result = logistics_graph.invoke(logistics_state)
         plan = result.get("logistics_plan")
@@ -196,13 +209,6 @@ def route_after_assess(state: SupervisorState) -> str:
       "run_logistics_agent"  — at least one cluster scored >= LOGISTICS_RISK_THRESHOLD
       "dispatch_commands"    — all scores below threshold, or no scores at all
     """
-    escalated = [e for e in state.escalations if e.escalate]
-    if escalated:
-        logger.info(
-            "route_after_assess: %d sector(s) escalated — invoking logistics agent",
-            len(escalated),
-        )
-        return "run_logistics_agent"
-
     logger.info("route_after_assess: no sectors escalated — skipping logistics")
-    return "dispatch_commands"
+    return route_base(state, next_node="run_logistics_agent")
+

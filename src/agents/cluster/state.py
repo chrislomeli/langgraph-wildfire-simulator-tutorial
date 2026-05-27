@@ -73,6 +73,6 @@ class ClusterAgentState(TracedState):
     evaluated: dict = Field(default_factory=dict)
     forecast: dict | list = Field(default_factory=dict)
     trend: dict | list = Field(default_factory=dict)
-    scenario_text: str | None = Field(default=None)
+    scenario: dict | None = Field(default_factory=dict)
 
     error: str | None = Field(default=None)

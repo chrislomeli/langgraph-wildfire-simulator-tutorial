@@ -26,6 +26,7 @@ STUB_LOGISTICS = False : requires the "logistics" role (Phase 1 ReAct loop)
 
 from __future__ import annotations
 
+import json
 import logging
 
 from langchain_core.messages import (
@@ -58,146 +59,146 @@ logger = logging.getLogger(__name__)
 
 STUB_LOGISTICS = True
 
-
-# ── Hotspot context rendering ───────────────────────────────────────────────────
 #
-# The logistics LLM reasons over a text "situation summary". Per the chosen
-# design, each escalated hotspot is rendered with THREE complementary views:
-#   1. The escalation header — why the cluster agent flagged it (reasoning,
-#      per-axis factors) and the radial sector analysis.
-#   2. A live 8-sector radial trace of the grid (burnable_miles + barriers) —
-#      the settlement-in-path / natural-firebreak signal the advisory hinges on.
-#   3. The cluster's spread-risk scenario (per-direction ignition risk) and the
-#      weather forecast, both computed upstream and carried in logistics state.
+# # ── Hotspot context rendering ───────────────────────────────────────────────────
+# #
+# # The logistics LLM reasons over a text "situation summary". Per the chosen
+# # design, each escalated hotspot is rendered with THREE complementary views:
+# #   1. The escalation header — why the cluster agent flagged it (reasoning,
+# #      per-axis factors) and the radial sector analysis.
+# #   2. A live 8-sector radial trace of the grid (burnable_miles + barriers) —
+# #      the settlement-in-path / natural-firebreak signal the advisory hinges on.
+# #   3. The cluster's spread-risk scenario (per-direction ignition risk) and the
+# #      weather forecast, both computed upstream and carried in logistics state.
+#
+#
+# def _render_forecast(briefing: dict | None, periods: int = 4) -> str:
+#     if not briefing or not briefing.get("forecast"):
+#         return "  (no forecast available)"
+#     rows = briefing["forecast"].get("periods", [])[:periods]
+#     if not rows:
+#         return "  (no forecast periods)"
+#     lines = []
+#     for p in rows:
+#         pop = (p.get("probabilityOfPrecipitation") or {}).get("value", 0)
+#         lines.append(
+#             f"  {p.get('date', '?')}: {p.get('temperature')}"
+#             f"{p.get('temperatureUnit', '')} RH={p.get('humidity_pct')}% "
+#             f"wind={p.get('windSpeed')} {p.get('windDirection')} "
+#             f"fuel_moisture={p.get('fuel_moisture')} precip={pop}%"
+#         )
+#     return "\n".join(lines)
+#
+#
+# def _render_hotspot_context(
+#     escalation: Escalation,
+#     hotspot: HotspotSectors,
+#     briefing: dict | None,
+# ) -> str:
+#     """Render one escalated hotspot into the rich combined situation block."""
+#     parts = [f"========== Hotspot ({escalation.row}, {escalation.col}) =========="]
+#     parts.append("Cluster agent reasoning:")
+#     parts.append(f"  {escalation.reasoning}")
+#     parts.append("Factor observations:")
+#     parts.append(f"  Temperature/Humidity : {escalation.factors.temperature_humidity}")
+#     parts.append(f"  Wind                 : {escalation.factors.wind}")
+#     parts.append(f"  Fuel & Terrain       : {escalation.factors.fuel_and_terrain}")
+#     parts.append(f"  Moisture trend       : {escalation.factors.moisture_trend}")
+#     parts.append("Radial sector trace (live grid scan — burnable distance & barriers):")
+#     parts.append(hotspot.to_context_string())
+#     parts.append("")
+#     parts.append("Weather forecast (upcoming periods):")
+#     parts.append(_render_forecast(briefing))
+#     return "\n".join(parts)
 
-
-def _render_forecast(briefing: dict | None, periods: int = 4) -> str:
-    if not briefing or not briefing.get("forecast"):
-        return "  (no forecast available)"
-    rows = briefing["forecast"].get("periods", [])[:periods]
-    if not rows:
-        return "  (no forecast periods)"
-    lines = []
-    for p in rows:
-        pop = (p.get("probabilityOfPrecipitation") or {}).get("value", 0)
-        lines.append(
-            f"  {p.get('date', '?')}: {p.get('temperature')}"
-            f"{p.get('temperatureUnit', '')} RH={p.get('humidity_pct')}% "
-            f"wind={p.get('windSpeed')} {p.get('windDirection')} "
-            f"fuel_moisture={p.get('fuel_moisture')} precip={pop}%"
-        )
-    return "\n".join(lines)
-
-
-def _render_hotspot_context(
-    escalation: Escalation,
-    hotspot: HotspotSectors,
-    briefing: dict | None,
-) -> str:
-    """Render one escalated hotspot into the rich combined situation block."""
-    parts = [f"========== Hotspot ({escalation.row}, {escalation.col}) =========="]
-    parts.append("Cluster agent reasoning:")
-    parts.append(f"  {escalation.reasoning}")
-    parts.append("Factor observations:")
-    parts.append(f"  Temperature/Humidity : {escalation.factors.temperature_humidity}")
-    parts.append(f"  Wind                 : {escalation.factors.wind}")
-    parts.append(f"  Fuel & Terrain       : {escalation.factors.fuel_and_terrain}")
-    parts.append(f"  Moisture trend       : {escalation.factors.moisture_trend}")
-    parts.append("Radial sector trace (live grid scan — burnable distance & barriers):")
-    parts.append(hotspot.to_context_string())
-    parts.append("")
-    parts.append("Weather forecast (upcoming periods):")
-    parts.append(_render_forecast(briefing))
-    return "\n".join(parts)
-
-
-def make_sector_analysis_node(
-    world: WorldView,
-    risk_threshold: int = 5,
-    max_sector_miles: float = 20.0,
-):
-    """Factory: builds the logistics situation summary from the escalations.
-
-    The cluster agents have already found and scored the hotspots. Each
-    ``Escalation`` carries an anchor cell, reasoning, per-axis factors, and
-    the radial sector analysis. This node consumes those escalations directly —
-    it does NOT rediscover hotspots by scanning the grid (the old RiskView/grid-scan path is gone).
-
-    For each escalated hotspot it builds a ``HotspotSectors`` via a live
-    8-sector radial trace (burnable distance + barriers), then renders a rich
-    text block combining that trace with the cluster's spread-risk scenario and
-    the weather forecast carried in logistics state.
-
-    Parameters
-    ──────────
-    world            : Read-only view over the world (the engine satisfies this).
-    risk_threshold   : Advisory guidance threshold, shown in the summary header.
-                       The upstream ``escalate`` flag is the actual gate.
-    max_sector_miles : Maximum distance to trace in each radial sector.
-
-    Returns
-    ───────
-    Node function that returns {"sector_analysis": [...], "situation_summary":
-    str, "status": PROCESSING}.
-    """
-    @node_executor("sector_analysis")
-    def sector_analysis(state: LogisticsAgentState) -> dict:
-        """Build per-hotspot situation context from the escalations."""
-        escalations = [e for e in state.escalations if e.escalate]
-
-        if not escalations:
-            logger.info("sector_analysis: no escalated hotspots handed to logistics")
-            return {
-                "sector_analysis": [],
-                "situation_summary": "No escalated hotspots were handed to logistics.",
-                "status": StatusValue.PROCESSING,
-            }
-
-        hotspots: list[HotspotSectors] = []
-        context_parts = [
-            f"{len(escalations)} escalated fire hotspot(s) handed off for resource "
-            f"assessment (advisory threshold risk ≥ {risk_threshold}):",
-            "",
-        ]
-
-        for esc in escalations:
-            row, col = esc.row, esc.col
-
-            # Long-range radial trace via the world engine.
-            hotspot = world.hotspot_sectors(row, col, max_miles=max_sector_miles)
-            hotspot = HotspotSectors(
-                epicenter_row=row,
-                epicenter_col=col,
-                sectors=hotspot.sectors,
-            )
-            hotspots.append(hotspot)
-
-            briefing = state.briefings.get((row, col, esc.layer)) or state.briefings.get(
-                (row, col, 0)
-            )
-            context_parts.append(_render_hotspot_context(esc, hotspot, briefing))
-            context_parts.append("")
-
-            logger.info(
-                "Hotspot at (%d, %d): 8 sectors traced, max_burnable=%.1f miles",
-                row,
-                col,
-                max(s.burnable_miles for s in hotspot.sectors),
-            )
-
-        logger.info(
-            "sector_analysis complete: %d hotspot(s), %d total sectors",
-            len(hotspots),
-            len(hotspots) * 8,
-        )
-
-        return {
-            "sector_analysis": [h.model_dump() for h in hotspots],
-            "situation_summary": "\n".join(context_parts),
-            "status": StatusValue.PROCESSING,
-        }
-
-    return sector_analysis
+#
+# def make_sector_analysis_node(
+#     world: WorldView,
+#     risk_threshold: int = 5,
+#     max_sector_miles: float = 20.0,
+# ):
+#     """Factory: builds the logistics situation summary from the escalations.
+#
+#     The cluster agents have already found and scored the hotspots. Each
+#     ``Escalation`` carries an anchor cell, reasoning, per-axis factors, and
+#     the radial sector analysis. This node consumes those escalations directly —
+#     it does NOT rediscover hotspots by scanning the grid (the old RiskView/grid-scan path is gone).
+#
+#     For each escalated hotspot it builds a ``HotspotSectors`` via a live
+#     8-sector radial trace (burnable distance + barriers), then renders a rich
+#     text block combining that trace with the cluster's spread-risk scenario and
+#     the weather forecast carried in logistics state.
+#
+#     Parameters
+#     ──────────
+#     world            : Read-only view over the world (the engine satisfies this).
+#     risk_threshold   : Advisory guidance threshold, shown in the summary header.
+#                        The upstream ``escalate`` flag is the actual gate.
+#     max_sector_miles : Maximum distance to trace in each radial sector.
+#
+#     Returns
+#     ───────
+#     Node function that returns {"sector_analysis": [...], "situation_summary":
+#     str, "status": PROCESSING}.
+#     """
+#     @node_executor("sector_analysis")
+#     def sector_analysis(state: LogisticsAgentState) -> dict:
+#         """Build per-hotspot situation context from the escalations."""
+#         escalations = state.escalations
+#
+#         if not escalations:
+#             logger.info("sector_analysis: no escalated hotspots handed to logistics")
+#             return {
+#                 "sector_analysis": [],
+#                 "situation_summary": "No escalated hotspots were handed to logistics.",
+#                 "status": StatusValue.COMPLETED,
+#             }
+#
+#         hotspots: list[HotspotSectors] = []
+#         context_parts = [
+#             f"{len(escalations)} escalated fire hotspot(s) handed off for resource "
+#             f"assessment (advisory threshold risk ≥ {risk_threshold}):",
+#             "",
+#         ]
+#
+#         for esc in escalations:
+#             row, col = esc.row, esc.col
+#
+#             # Long-range radial trace via the world engine.
+#             hotspot = world.hotspot_sectors(row, col, max_miles=max_sector_miles)
+#             hotspot = HotspotSectors(
+#                 epicenter_row=row,
+#                 epicenter_col=col,
+#                 sectors=hotspot.sectors,
+#             )
+#             hotspots.append(hotspot)
+#
+#             briefing = state.briefings.get((row, col, esc.layer)) or state.briefings.get(
+#                 (row, col, 0)
+#             )
+#             context_parts.append(_render_hotspot_context(esc, hotspot, briefing))
+#             context_parts.append("")
+#
+#             logger.info(
+#                 "Hotspot at (%d, %d): 8 sectors traced, max_burnable=%.1f miles",
+#                 row,
+#                 col,
+#                 max(s.burnable_miles for s in hotspot.sectors),
+#             )
+#
+#         logger.info(
+#             "sector_analysis complete: %d hotspot(s), %d total sectors",
+#             len(hotspots),
+#             len(hotspots) * 8,
+#         )
+#
+#         return {
+#             "sector_analysis": [h.model_dump() for h in hotspots],
+#             "situation_summary": "\n".join(context_parts),
+#             "status": StatusValue.PROCESSING,
+#         }
+#
+#     return sector_analysis
 
 
 # ── Node: logistics_agent ─────────────────────────────────────────────────────
@@ -248,7 +249,7 @@ def make_logistics_agent_node(
         # doesn't take down the stub path. A failure here is surfaced as a
         # warning; the live path below proceeds without a system prompt.
         try:
-            system_prompt = prompt_registry.render("logistics", {"state": state})
+            system_prompt = prompt_registry.render("logistics", {"escalations": state.escalations})
         except Exception as exc:  # noqa: BLE001 — keep the stub path resilient
             logger.warning("logistics_agent: 'logistics' prompt render failed: %s", exc)
             system_prompt = None
@@ -264,21 +265,16 @@ def make_logistics_agent_node(
         if not convo:
             convo = [
                 HumanMessage(
-                    content=(
-                        f"Situation summary:\n\n{state.situation_summary}\n\n"
-                        "Using the tools available, gather resource information for "
-                        "each hotspot and decide whether a ResourceAdvisory is warranted."
-                    )
+                    content=f"""ESCALATED HOTSPOTS ({len(state.escalations)} hotspots) :   
+                    <escalations>
+                    {state.escalations}
+                    </escalation>
+                    Using the tools available, gather resource information for each hotspot and decide whether a ResourceAdvisory is warranted
+                    """
                 )
             ]
 
-        # Visibility regardless of stub mode — log what we would send.
-        logger.info("logistics_agent SYSTEM prompt:\n%s", system_prompt)
-        logger.info(
-            "logistics_agent OUTGOING: %s",
-            [(type(m).__name__, m.content) for m in convo],
-        )
-
+        # Do the work
         if STUB_LOGISTICS or llm_with_tools is None:
             print(f"""\n{Colors.YELLOW}● STUB the LLM - no call to logistics {Colors.RESET}""")
             stub_content = "[STUB] Logistics plan — LLM not active in this milestone."
