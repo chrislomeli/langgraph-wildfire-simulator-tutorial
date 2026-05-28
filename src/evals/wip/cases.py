@@ -2,7 +2,7 @@
 
 Each LogisticsCase carries everything the LogisticsGraph needs:
   - situation_summary  : pre-authored supervisor context string
-  - escalations        : pre-authored list of escalation+radial_trace dicts
+  - escalations        : pre-authored list of escalation+scenario dicts
   - tool_responses     : authored responses for get_resources_within and
                          get_wildfire_activity — returned by mock tools
                          regardless of the arguments the LLM passes in

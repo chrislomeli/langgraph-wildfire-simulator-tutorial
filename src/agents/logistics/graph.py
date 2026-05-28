@@ -27,11 +27,15 @@ The ReAct loop
 Construction
 ────────────
 ``build_logistics_agent_graph`` is the only public entry point. It receives
-AgentDependencies (carries the world_engine, DataStore, and LLMRegistry).
+AgentDependencies plus an optional ``tools`` list.
 
-Tools are built only when the required dependency is available:
-  - get_wildfire_activity: requires data_store != None
-  - get_resources_within : requires data_store != None
+Tool injection
+──────────────
+If ``tools`` is provided, it is used directly — the caller is responsible for
+building tool callables (real DB-backed or mock). If omitted, tools are built
+from agent_deps.data_store (production default). Injecting tools makes the
+graph testable without a live database: eval cases supply mock callables that
+return authored responses regardless of the arguments the LLM passes in.
 
 The advisory is not a tool. extract_plan produces a LogisticsAssessment via
 structured output; if assessment.advisory is not None, extract_plan dispatches
@@ -58,7 +62,11 @@ from tools.wildfires import make_get_wildfire_activity
 logger = logging.getLogger(__name__)
 
 
-def build_logistics_agent_graph(*, agent_deps: AgentDependencies) -> LogisticsGraph:
+def build_logistics_agent_graph(
+    *,
+    agent_deps: AgentDependencies,
+    tools: list | None = None,
+) -> LogisticsGraph:
     """Compile and return the logistics agent graph.
 
     Parameters
@@ -68,8 +76,13 @@ def build_logistics_agent_graph(*, agent_deps: AgentDependencies) -> LogisticsGr
           - world_engine  : grid that sector_analysis traces around each escalation
           - data_store    : DataStore facade (resources + wildfire + advisory tools)
           - llm_registry  : LLM lookup by role (for logistics_agent node)
+    tools : list | None
+        Tool callables to bind to the LLM. If None, tools are built from
+        agent_deps.data_store (production default). Pass a list of mock
+        callables to run the graph without a live database.
     """
-    tools = _build_tools(agent_deps)
+    if tools is None:
+        tools = _build_tools(agent_deps)
 
     builder = StateGraph(LogisticsAgentState)
 

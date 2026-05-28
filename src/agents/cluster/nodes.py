@@ -167,7 +167,7 @@ def make_gather_request_data(
             "column_boundary": column_boundary,
             "trend": trend,
             "forecast": forecast,
-            "scenario": hotspot_sectors.model_dump(),
+            "radial_trace": hotspot_sectors.model_dump(),
         }
 
     return gather_request_data
@@ -203,7 +203,7 @@ async def call_evaluate_llm(
             max_columns=llm_request.max_cols,
             row=row,
             column=col,
-            scenario=llm_request.scenario,
+            radial_trace=llm_request.radial_trace,
             trend=json.dumps(llm_request.trend, indent=2),
             forecast=json.dumps(llm_request.forecast, indent=2),
         ),
@@ -349,7 +349,7 @@ def make_evaluate_node(
             id=state.sector_id,
             max_rows=state.row_boundary,
             max_cols=state.column_boundary,
-            scenario=state.scenario,
+            radial_trace=state.radial_trace,
             forecast=state.forecast,
             trend=state.trend
         )

@@ -1,0 +1,88 @@
+[
+  {
+    "escalation": {
+      "factors": {
+        "temperature_humidity": "stub \u2014 not evaluated",
+        "wind": "stub \u2014 not evaluated",
+        "fuel_and_terrain": "stub \u2014 not evaluated",
+        "moisture_trend": "stub \u2014 not evaluated"
+      },
+      "reasoning": "stub \u2014 not evaluated",
+      "escalate": true,
+      "sector_id": "sector(5,5)",
+      "row": 5,
+      "col": 5,
+      "layer": 0
+    },
+    "scenario": {
+      "epicenter_row": 5,
+      "epicenter_col": 5,
+      "sectors": [
+        {
+          "direction": "Direction.N",
+          "burnable_miles": 6.0,
+          "stop_reason": "grid_edge",
+          "avg_vegetation": 0.3,
+          "avg_fuel_moisture": 0.09,
+          "wind_aligned": true
+        },
+        {
+          "direction": "Direction.NE",
+          "burnable_miles": 6.0,
+          "stop_reason": "grid_edge",
+          "avg_vegetation": 0.13999999999999999,
+          "avg_fuel_moisture": 0.041999999999999996,
+          "wind_aligned": false
+        },
+        {
+          "direction": "Direction.E",
+          "burnable_miles": 49.199999999999996,
+          "stop_reason": "max_distance",
+          "avg_vegetation": 0.2073170731707317,
+          "avg_fuel_moisture": 0.05780487804878049,
+          "wind_aligned": false
+        },
+        {
+          "direction": "Direction.SE",
+          "burnable_miles": 48.0,
+          "stop_reason": "barrier:urban",
+          "avg_vegetation": 0.145,
+          "avg_fuel_moisture": 0.03675,
+          "wind_aligned": false
+        },
+        {
+          "direction": "Direction.S",
+          "burnable_miles": 38.4,
+          "stop_reason": "barrier:urban",
+          "avg_vegetation": 0.1625,
+          "avg_fuel_moisture": 0.0403125,
+          "wind_aligned": false
+        },
+        {
+          "direction": "Direction.SW",
+          "burnable_miles": 6.0,
+          "stop_reason": "grid_edge",
+          "avg_vegetation": 0.2,
+          "avg_fuel_moisture": 0.041999999999999996,
+          "wind_aligned": false
+        },
+        {
+          "direction": "Direction.W",
+          "burnable_miles": 6.0,
+          "stop_reason": "grid_edge",
+          "avg_vegetation": 0.26,
+          "avg_fuel_moisture": 0.06,
+          "wind_aligned": false
+        },
+        {
+          "direction": "Direction.NW",
+          "burnable_miles": 6.0,
+          "stop_reason": "grid_edge",
+          "avg_vegetation": 0.1,
+          "avg_fuel_moisture": 0.03,
+          "wind_aligned": false
+        }
+      ]
+    }
+  }
+]

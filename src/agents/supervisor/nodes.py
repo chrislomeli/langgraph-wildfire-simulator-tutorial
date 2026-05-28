@@ -96,13 +96,13 @@ def make_run_cluster_agent(cluster_graph: CompiledStateGraph):
 
         result: ClusterAgentState = await cluster_graph.ainvoke(state)
         # A cluster that completes below the heuristic gate never reaches
-        # evaluate, so escalation/briefing/scenario are never written. Use .get
+        # evaluate, so escalation/briefing/radial_trace are never written. Use .get
         # so those clusters contribute nothing rather than raising KeyError.
         escalation = result.get("escalation")
         row, col = escalation.row, escalation.col
         hotspot = dict(
             escalation= escalation.model_dump(),
-            scenario=result.get("scenario", {}),
+            radial_trace=result.get("radial_trace", {}),
             # forcast=result.get("forecast", {}),
         )
         return {
@@ -130,7 +130,7 @@ def assess_situation(state: SupervisorState) -> dict:
             if escalation_record.get("escalate"):
                 escalated.append(dict(
                     escalation=escalation_record,
-                    scenario=record.get("scenario", "")
+                    radial_trace=record.get("radial_trace", "")
                 ))
 
     if len(escalated):

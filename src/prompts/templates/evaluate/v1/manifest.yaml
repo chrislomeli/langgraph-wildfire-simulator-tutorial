@@ -5,7 +5,7 @@ required_vars:
   - column
   - max_rows
   - max_columns
-  - scenario
+  - radial_trace
   - trend
   - forecast
 

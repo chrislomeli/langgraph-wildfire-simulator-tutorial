@@ -66,9 +66,11 @@ def seed_dataset(
         )
 
     cases = source.load()
+    inputs = [{"input": _serialize(c.input), "case_id": c.id} for c in cases]
+    outputs = [{"expected": _serialize(c.expected), "tags": list(c.tags), "notes": c.notes} for c in cases]
     client.create_examples(
-        inputs=[{"input": _serialize(c.input), "case_id": c.id} for c in cases],
-        outputs=[{"expected": _serialize(c.expected), "tags": list(c.tags), "notes": c.notes} for c in cases],
+        inputs=inputs,
+        outputs=outputs,
         dataset_id=dataset.id,
     )
     return str(dataset.id)

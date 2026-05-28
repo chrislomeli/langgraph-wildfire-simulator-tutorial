@@ -262,17 +262,21 @@ def make_logistics_agent_node(
         # turn's content and breaks the loop (and fails validation once the list
         # contains Message objects).
         convo = list(state.messages)
-        if not convo:
-            convo = [
-                HumanMessage(
-                    content=f"""ESCALATED HOTSPOTS ({len(state.escalations)} hotspots) :   
+        human_prompt = f"""ESCALATED HOTSPOTS ({len(state.escalations)} hotspots) :
                     <escalations>
-                    {state.escalations}
+                    {json.dumps(state.escalations, indent=2)}
                     </escalation>
                     Using the tools available, gather resource information for each hotspot and decide whether a ResourceAdvisory is warranted
                     """
-                )
-            ]
+        # On the first call state.messages is empty — seed the human turn. It
+        # MUST be persisted (see the returns below): the add_messages reducer
+        # only keeps what this node returns, so if we don't persist it the
+        # escalation data vanishes on iteration 2+ and the LLM reconstructs /
+        # hallucinates hotspots from the bare tool-call history.
+        first_turn = not convo
+        new_human = HumanMessage(human_prompt) if first_turn else None
+        if first_turn:
+            convo = [new_human]
 
         # Do the work
         if STUB_LOGISTICS or llm_with_tools is None:
@@ -280,7 +284,7 @@ def make_logistics_agent_node(
             stub_content = "[STUB] Logistics plan — LLM not active in this milestone."
             stub = AIMessage(content=stub_content)
             return {
-                "messages": [stub],
+                "messages": [new_human, stub] if first_turn else [stub],
                 "logistics_plan": stub_content,
                 "status": StatusValue.COMPLETED,
             }
@@ -288,18 +292,24 @@ def make_logistics_agent_node(
         # Prepend the system prompt on every call — it carries the instructions
         # and sector-analysis format the LLM needs on each ReAct iteration. If
         # the render failed above we proceed without it (already warned).
+        print(f"""\n{Colors.BLUE}● Call the logistics  LLM  {Colors.RESET}""")
         outgoing = [SystemMessage(content=system_prompt), *convo] if system_prompt else list(convo)
         response = llm_with_tools.invoke(outgoing)
 
         if getattr(response, "tool_calls", None):
+            print(f"""\n{Colors.TEAL}● Tool Call {response.content_blocks[0]}{Colors.RESET}""")
             logger.info(
                 "logistics_agent: tool_calls=%d, continuing ReAct", len(response.tool_calls)
             )
         else:
+            print(f"""\n{Colors.TEAL}● Response {Colors.RESET}""")
             logger.info(
                 "logistics_agent: no tool_calls — ReAct loop complete, routing to extract_plan"
             )
-        return {"messages": [response], "status": StatusValue.PROCESSING}
+        return {
+            "messages": [new_human, response] if first_turn else [response],
+            "status": StatusValue.PROCESSING,
+        }
 
     return logistics_agent
 

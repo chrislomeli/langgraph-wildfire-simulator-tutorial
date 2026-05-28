@@ -27,98 +27,61 @@ What this evaluates:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
-
-from langsmith import Client
 
 from agents.logistics.state import LogisticsAssessment
 from config import get_settings
-from evals.logistics.cases import LogisticsCase
 from evals.logistics.dataset import LogisticsDataset
-from evals.logistics.logistics_evaluators import AssessmentPopulated
 from evals.logistics.task import LogisticsTask
-from evals.framework.evaluators import BooleanVote, ReferenceJudge
-from evals.framework.judge import make_llm_judge
-from evals.framework.langsmith_adapter import run_langsmith_eval, seed_dataset
+from evals.wip.langsmith.langsmith_runner import run_logistics_langsmith
 from llm.llm_registry import LLM_ROLE_CONFIG, build_llm_registry, models
 from prompts import PromptRegistry
 
 logging.basicConfig(level=logging.WARNING)
 
-_JUDGE_SYSTEM = """\
-You are an impartial evaluator scoring a wildfire logistics agent's resource deployment reasoning.
-You will be given evaluation criteria and the agent's assessment and advisory rationale to score.
-Respond with a single float between 0.0 and 1.0 — nothing else.
-  0.0 = reasoning does not meet the criteria at all
-  0.5 = reasoning partially meets the criteria
-  1.0 = reasoning fully meets the criteria\
-"""
+async def local_runner(task : LogisticsTask, dataset: LogisticsDataset, limit: int = 0):
+    data = dataset.load_local()
 
-EXPERIMENT_PREFIX = "logistics-graph"
-REPEATS = 3
+    for i, case in enumerate(data) :
+        if i >= limit > 0:
+            break
+        print(f"case: {case.id}")
+        output, usage = await task.run(case)
 
 
-def main(seed_only: bool = False) -> None:
+async def main(seed_only: bool = False, langsmith: bool = False) -> None:
     # get setting = normal
     settings = get_settings()
 
     # push lang setting to os.environment()
     settings.apply_langsmith()
 
-    # langsmith - client, dataset seed,
-    langsmith_client = Client()
+    # build the databaset
     dataset = LogisticsDataset()
-    dataset_name = dataset.name  # derived from dataset.version — single knob
-
-    dataset_id = seed_dataset(dataset, client=langsmith_client, dataset_name=dataset_name)
-    print(f"Dataset '{dataset_name}' ready (id={dataset_id})")
-
-    if seed_only:
-        print("--seed-only: skipping eval run.")
-        return
 
     # wildfire framework setup for prompt and llm
     llm_registry = build_llm_registry(settings, models, LLM_ROLE_CONFIG)
     prompt_registry = PromptRegistry()
     prompt_registry.register_models(LogisticsAssessment)
 
-
-    #Langsmith evaluators
-    judge = make_llm_judge(llm_registry.get("classifier"), system_prompt=_JUDGE_SYSTEM)
-
-    evaluators = [
-        BooleanVote(
-            name="advisory_decision",
-            predict=lambda o: o.advisory is not None,
-            expected=lambda x: x.get("expect_advisory"),
-        ),
-        AssessmentPopulated(name="assessment_populated"),
-        ReferenceJudge(
-            name="advisory_quality",
-            reference=lambda x: x.get("advisory_criteria", ""),
-            actual=lambda o: f"{o.assessment}\n\nRationale: {o.advisory_rationale}",
-            judge=judge,
-            threshold=0.7,
-        ),
-    ]
-
-    llm_registry.reset_usage()
-
     task = LogisticsTask(
         prompt_registry=prompt_registry,
         llm_registry=llm_registry,
     )
 
-    print(f"Running eval: {EXPERIMENT_PREFIX} × {REPEATS} repetitions …")
-    run_langsmith_eval(
-        task=task,
-        evaluators=evaluators,
-        dataset_name=dataset_name,
-        experiment_prefix=EXPERIMENT_PREFIX,
-        num_repetitions=REPEATS,
-        input_model=LogisticsCase,
-        output_model=LogisticsAssessment,
-    )
+    # Same task + dataset, two runners: tracked LangSmith experiment vs the
+    # in-process local loop. --langsmith selects the tracked path.
+    if langsmith:
+        run_logistics_langsmith(
+            task=task,
+            llm_registry=llm_registry,
+            dataset=dataset,
+            seed_only=seed_only,
+        )
+    else:
+        await local_runner(task=task, dataset=dataset, limit=1)
+
     print("Done.")
     for row in llm_registry.usage_report():
         cost = row["estimated_cost_usd"]
@@ -128,9 +91,18 @@ def main(seed_only: bool = False) -> None:
             f" (in={row['input_tokens']} out={row['output_tokens']}){cost_str}"
         )
 
-
+"""
+  python -m evals.wip                      # local loop (default) — direct, in-process, fast
+  python -m evals.wip --langsmith          # tracked LangSmith experiment
+  python -m evals.wip --langsmith --seed-only   # just seed the dataset, skip the run
+"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed-only", action="store_true")
+    parser.add_argument(
+        "--langsmith",
+        action="store_true",
+        help="Run the tracked LangSmith experiment instead of the local loop.",
+    )
     args = parser.parse_args()
-    main(seed_only=args.seed_only)
+    asyncio.run(main(seed_only=args.seed_only, langsmith=args.langsmith))

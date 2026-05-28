@@ -43,7 +43,11 @@ class BooleanVote:
             return [Score(self.name, 0.0, passed=False, detail="all samples parse-failed")]
         expected_val = self.expected(ex.case.expected)
         if expected_val is None:
-            return [Score(self.name, 0.0, passed=None, detail="not scored (ambiguous case)")]
+            # Ambiguous case (no ground-truth answer). Emit NO score at all —
+            # returning a 0.0 here would be recorded as a failed run downstream
+            # and drag the aggregate down. An empty list means "this evaluator
+            # has nothing to say about this case", so it's omitted cleanly.
+            return []
         actual_outputs = [bool(self.predict(o)) for o in outs]
         actual_majority = _majority(actual_outputs)
         expected = bool(expected_val)

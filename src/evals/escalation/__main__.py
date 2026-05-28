@@ -48,7 +48,6 @@ Respond with a single float between 0.0 and 1.0 — nothing else.
   1.0 = reasoning fully meets the criteria\
 """
 
-DATASET_NAME = "escalation-golden-v4"
 EXPERIMENT_PREFIX = "evaluate-node"
 REPEATS = 3
 
@@ -59,9 +58,10 @@ def main(seed_only: bool = False) -> None:
 
     langsmith_client = Client()
     dataset = ScenariosDataset()
+    dataset_name = dataset.name  # derived from dataset.version — single knob
 
-    dataset_id = seed_dataset(dataset, client=langsmith_client, dataset_name=DATASET_NAME)
-    print(f"Dataset '{DATASET_NAME}' ready (id={dataset_id})")
+    dataset_id = seed_dataset(dataset, client=langsmith_client, dataset_name=dataset_name)
+    print(f"Dataset '{dataset_name}' ready (id={dataset_id})")
 
     if seed_only:
         print("--seed-only: skipping eval run.")
@@ -107,16 +107,16 @@ def main(seed_only: bool = False) -> None:
     llm_registry.reset_usage()
 
     print(f"Running eval: {EXPERIMENT_PREFIX} × {REPEATS} repetitions …")
-    results = run_langsmith_eval(
+    run_langsmith_eval(
         task=task,
         evaluators=evaluators,
-        dataset_name=DATASET_NAME,
+        dataset_name=dataset_name,
         experiment_prefix=EXPERIMENT_PREFIX,
         num_repetitions=REPEATS,
         input_model=EscalationCase,
         output_model=Escalation,
     )
-    print(f"Done. View results at: {results.experiment_results_url}")
+    print("Done.")
     for row in llm_registry.usage_report():
         cost = row["estimated_cost_usd"]
         cost_str = f"  cost=${cost:.4f}" if cost is not None else ""

@@ -100,9 +100,10 @@ class Evaluation(BaseModel):
 class Escalation(Evaluation):
     """Evaluation result anchored to a specific grid cell.
 
-    scenario_text carries the radial sector analysis the cluster agent
-    used when making its decision — the logistics agent gets the same
-    spatial context without re-deriving it from the grid.
+    The radial_trace (carried alongside the escalation) holds the radial
+    sector analysis the cluster agent used when making its decision — the
+    logistics agent gets the same spatial context without re-deriving it
+    from the grid.
     """
     sector_id: str
     row: int
@@ -123,7 +124,7 @@ class EvaluationCell(BaseModel):
 class EvaluatorLLMRequest(BaseModel):
     id: str
     cell: EvaluationCell
-    scenario: dict
+    radial_trace: dict | str  # dict = production HotspotSectors dump; str = eval pre-authored summary
     forecast: dict | list  # dict = production NWS envelope; list = eval flat periods
     trend: dict | list     # dict = production NWS envelope; list = eval flat periods
     max_rows: int = 0

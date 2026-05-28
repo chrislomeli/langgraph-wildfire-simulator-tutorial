@@ -2,7 +2,7 @@
 
 Each EscalationCase carries everything the evaluate node LLM path needs:
   - cell         : EvaluationCell (the human-prompt reading)
-  - scenario_text: pre-authored radial sector summary (no hotspot_sectors() needed)
+  - radial_trace : pre-authored radial sector summary (no hotspot_sectors() needed)
   - forecast     : pre-authored weather forecast periods (no create_briefing() needed)
   - trend        : pre-authored weather history periods
 
@@ -82,7 +82,7 @@ def build_cases() -> list[EscalationCase]:
     """Build and return the golden case list.
 
     Called by ScenariosDataset.load() — not at import time. Each case carries
-    large strings (scenario_text, forecast, trend), so deferring construction
+    large strings (radial_trace, forecast, trend), so deferring construction
     avoids paying that cost on every import.
     """
     return [
@@ -99,7 +99,7 @@ def build_cases() -> list[EscalationCase]:
             vegetation=0.85,
             fuel_moisture=0.05,
         ),
-        scenario=(
+        radial_trace=(
             "Hotspot at (10, 10): Risk=9/10, Confidence=3/3\n"
             "Radial sector analysis:\n"
             "  N : 1.0mi → fuel continues beyond trace limit | fuel=0.83 | moisture=0.05 | slope=0.0° | fire_intensity=0.00\n"
@@ -136,7 +136,7 @@ def build_cases() -> list[EscalationCase]:
             vegetation=0.6,
             fuel_moisture=0.70,
         ),
-        scenario=(
+        radial_trace=(
             "Hotspot at (10, 10): Risk=1/10, Confidence=3/3\n"
             "Radial sector analysis:\n"
             "  N : 1.0mi → fuel continues beyond trace limit | fuel=0.58 | moisture=0.69 | slope=0.0° | fire_intensity=0.00\n"
@@ -174,7 +174,7 @@ def build_cases() -> list[EscalationCase]:
             wind_direction_deg=180.0,
             fuel_moisture=0.05,
         ),
-        scenario=(
+        radial_trace=(
             "Hotspot at (10, 10): Risk=0/10, Confidence=3/3\n"
             "Radial sector analysis:\n"
             "  N : 0.0mi → ROCK (natural firebreak) | fuel=0.00 | moisture=0.05 | slope=0.0° | fire_intensity=0.00\n"
@@ -211,7 +211,7 @@ def build_cases() -> list[EscalationCase]:
             vegetation=0.5,
             fuel_moisture=0.25,
         ),
-        scenario=(
+        radial_trace=(
             "Hotspot at (10, 10): Risk=5/10, Confidence=1/3\n"
             "Radial sector analysis:\n"
             "  N : 1.0mi → fuel continues beyond trace limit | fuel=0.49 | moisture=0.25 | slope=0.0° | fire_intensity=0.00\n"
@@ -250,7 +250,7 @@ def build_cases() -> list[EscalationCase]:
             vegetation=0.70,
             fuel_moisture=0.75,
         ),
-        scenario=(
+        radial_trace=(
             "Hotspot at (10, 10): Risk=3/10, Confidence=2/3\n"
             "Radial sector analysis:\n"
             "  N : 1.0mi → fuel continues beyond trace limit | fuel=0.69 | moisture=0.74 | slope=0.0° | fire_intensity=0.00\n"
@@ -292,7 +292,7 @@ def build_cases() -> list[EscalationCase]:
             vegetation=0.70,
             fuel_moisture=0.15,
         ),
-        scenario=(
+        radial_trace=(
             "Hotspot at (10, 10): Risk=8/10, Confidence=1/3\n"
             "Radial sector analysis:\n"
             "  N : 1.0mi → fuel continues beyond trace limit | fuel=0.69 | moisture=0.15 | slope=0.0° | fire_intensity=0.00 \U0001f525 WIND-ALIGNED\n"

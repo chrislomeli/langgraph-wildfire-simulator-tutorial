@@ -13,25 +13,15 @@ from evals.framework.core import Case
 class LogisticsDataset:
     """DatasetSource backed by the hand-authored CASES list.
 
-    Bump ``version`` when golden data changes. ``name`` derives the LangSmith
-    dataset name from it, so a single bump both (a) points runners at a fresh
-    dataset — forcing a reseed, since seed_dataset keys idempotency on the
-    name — and (b) keeps run records traceable to the version they scored.
+    Bump version when golden data changes — LangSmith run records are
+    traceable to the dataset version they scored.
     """
 
-    base_name = "logistics-golden"
     version = "v4"
-
-    @property
-    def name(self) -> str:
-        """LangSmith dataset name — the single source of truth for both runners."""
-        return f"{self.base_name}-{self.version}"
 
     def load(self) -> list[Case[LogisticsCase, dict]]:
         return [_to_case(c) for c in build_cases()]
 
-    def load_local(self) -> list[Case[LogisticsCase, dict]]:
-        return build_cases()
 
 def _to_case(c: LogisticsCase) -> Case[LogisticsCase, dict]:
     return Case(
