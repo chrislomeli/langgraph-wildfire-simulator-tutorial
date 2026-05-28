@@ -42,10 +42,12 @@ logging.basicConfig(level=logging.WARNING)
 _JUDGE_SYSTEM = """\
 You are an impartial evaluator scoring a fire-risk assessment agent's reasoning.
 You will be given evaluation criteria and the agent's four-axis reasoning to score.
-Respond with a single float between 0.0 and 1.0 — nothing else.
+Score it from 0.0 to 1.0:
   0.0 = reasoning does not meet the criteria at all
   0.5 = reasoning partially meets the criteria
-  1.0 = reasoning fully meets the criteria\
+  1.0 = reasoning fully meets the criteria
+Always give a brief reason. When the score is below 1.0, state specifically what the
+reasoning was missing or got wrong relative to the criteria.\
 """
 
 EXPERIMENT_PREFIX = "evaluate-node"

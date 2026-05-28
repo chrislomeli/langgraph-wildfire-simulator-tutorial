@@ -138,7 +138,7 @@ class ReferenceJudge:
     name: str
     reference: Callable[[Any], str]  # Expected -> reference text
     actual: Callable[[Any], str]  # Output   -> produced text
-    judge: Callable[[str, str], float]
+    judge: Callable[[str, str], tuple[float, str]]  # (reference, actual) -> (score, reason)
     threshold: float = 0.7
 
     def evaluate(self, ex: CaseExecution) -> list[Score]:
@@ -146,9 +146,19 @@ class ReferenceJudge:
         if not outs:
             return [Score(self.name, 0.0, passed=False, detail="all samples parse-failed")]
         ref = self.reference(ex.case.expected)
+        if not ref:
+            # No criteria authored for this case. Emit NO score — same reasoning
+            # as BooleanVote's ambiguous branch: a 0.0 here would be recorded as
+            # a failed run and drag the aggregate down. Empty list = "nothing to
+            # say about this case", so it's omitted cleanly.
+            return []
         graded = [self.judge(ref, self.actual(o)) for o in outs]
-        avg = mean(graded)
+        scores = [score for score, _ in graded]
+        reasons = [reason for _, reason in graded if reason]
+        avg = mean(scores)
         ok = avg >= self.threshold
-        return [
-            Score(self.name, avg, passed=ok, detail=f"judge mean={avg:.2f} thr={self.threshold}")
-        ]
+        # Surface the judge's reasoning in detail → flows to the LangSmith
+        # feedback comment, so a sub-1.0 score says WHY, not just how much.
+        reason_text = " | ".join(reasons) if reasons else "(no reason given)"
+        detail = f"mean={avg:.2f} thr={self.threshold} — {reason_text}"
+        return [Score(self.name, avg, passed=ok, detail=detail)]

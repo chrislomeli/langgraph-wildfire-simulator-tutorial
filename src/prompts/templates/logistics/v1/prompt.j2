@@ -102,10 +102,20 @@ from these results.
 3. Assess whether reachable resources are sufficient for the potential spread
    indicated by burnable_miles.
 4. Optionally call get_wildfire_activity for historical scale context.
-5. State your conclusion in a clear final paragraph:
-     - Whether conditions warrant a ResourceAdvisory and why.
-     - The single most important factor that drove your decision.
-     - Any resource gaps or natural barriers that were decisive.
+5. State your conclusion in a clear final paragraph. Be specific — generic
+   statements of danger are not enough. When an advisory is warranted it MUST
+   name:
+     - The primary threat vector: the wind-aligned direction, its burnable
+       distance, and what sits at the end of that path — name the threatened
+       URBAN settlement or asset, not just "an urban area".
+     - For multiple hotspots feeding the same corridor: say so explicitly and
+       treat them as ONE compound threat (combined front toward a shared
+       terminus), not separate events.
+     - The decisive resource gap or barrier — concretely (e.g. "no resources
+       within 30 mi of (10,10)" or "river caps spread at 4.8 mi").
+     - An explicit recommendation: what to pre-position and WHERE (staged
+       between the hotspot and the threatened area), or "monitor only" when no
+       advisory is warranted.
 
 ## Hard Rules
   - Call get_resources_within exactly once per hotspot. Do not repeat it

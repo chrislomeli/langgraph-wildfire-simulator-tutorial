@@ -7,15 +7,17 @@ from evals.framework.evaluators import BooleanVote, ReferenceJudge
 from evals.framework.judge import make_llm_judge
 from evals.framework.langsmith_adapter import run_langsmith_eval, seed_dataset
 from evals.logistics.cases import LogisticsCase
-from evals.logistics.logistics_evaluators import AssessmentPopulated
+from evals.logistics.logistics_evaluators import AssessmentPopulated, assessment_for_judge
 
 _JUDGE_SYSTEM = """\
 You are an impartial evaluator scoring a wildfire logistics agent's resource deployment reasoning.
 You will be given evaluation criteria and the agent's assessment and advisory rationale to score.
-Respond with a single float between 0.0 and 1.0 — nothing else.
+Score it from 0.0 to 1.0:
   0.0 = reasoning does not meet the criteria at all
   0.5 = reasoning partially meets the criteria
-  1.0 = reasoning fully meets the criteria\
+  1.0 = reasoning fully meets the criteria
+Always give a brief reason. When the score is below 1.0, state specifically what the
+reasoning was missing or got wrong relative to the criteria.\
 """
 
 EXPERIMENT_PREFIX = "logistics-graph"
@@ -48,7 +50,7 @@ def run_logistics_langsmith(task, llm_registry, dataset, seed_only):
         ReferenceJudge(
             name="advisory_quality",
             reference=lambda x: x.get("advisory_criteria", ""),
-            actual=lambda o: f"{o.assessment}\n\nRationale: {o.advisory_rationale}",
+            actual=assessment_for_judge,
             judge=judge,
             threshold=0.7,
         ),
