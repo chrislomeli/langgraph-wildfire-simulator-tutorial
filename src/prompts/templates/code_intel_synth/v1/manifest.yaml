@@ -1,0 +1,4 @@
+description: "Code intelligence synthesis prompt — answer a question grounded in retrieved code chunks"
+required_vars:
+  - query
+  - context_blocks

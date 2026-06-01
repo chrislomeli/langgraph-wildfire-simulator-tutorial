@@ -6,6 +6,23 @@ professional-level RAG underneath — not the other way around.*
 
 ---
 
+## Build checklist
+
+| Status | Item | What / Why |
+|--------|------|------------|
+| ✅ | Ingestion pipeline | Walk → chunk → embed → store. tree-sitter structural chunking + MarkdownSplitter + FixedSplitter. Done. |
+| ⬜ | LangGraph v1 agent | Linear pipeline: retrieve → synthesize. Get end-to-end working fast. Most important next step. |
+| ⬜ | Eval framework — Layer A | Precision@5 / Recall@5 / MRR over hand-authored retrieval ground truth. Deterministic, no LLM judge. Core skill. |
+| ⬜ | Eval framework — Layer B | Faithfulness / answer relevance / correctness via LLM-as-judge (Ragas). Measures synthesis, not retrieval. Core skill. |
+| ⬜ | Hybrid search | Add Postgres FTS (BM25) + RRF fusion alongside vector search. One implementation to understand *why* hybrid beats pure vector on identifier-heavy queries. |
+| ⬜ | Synthesis prompt design | How to pack context, instruct citation, prevent hallucination at the prompt level. More impactful than retrieval tuning. Missing from original doc. |
+| ⬜ | ReAct loop + fallback | Iteration cap + forced-exit synthesis + fallback on empty retrieval. Already built in logistics agent — repeat in retrieval context to cement it. |
+| ⬜ | Reranking (light) | Add one FlashRank call. Understand cross-encoder vs bi-encoder concept. Don't over-invest. |
+| ⬜ | Query decomposition | Planner breaks complex question into sub-queries. Real pattern. Build only if v1 evals show multi-part questions failing. |
+| ⬜ | Parent-child chunking | Embed small units, return larger context at query time. Good concept. Defer until evals show it's needed. |
+
+---
+
 ## Up front Phased build
 
 Each phase ends with a measurable result. None of the phases require the

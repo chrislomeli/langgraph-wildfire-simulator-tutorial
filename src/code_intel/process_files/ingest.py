@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import ClassVar
 
 from code_intel.process_files.embedder import Embedder
-from code_intel.process_files.splitter import FixedSplitter, SplitterRegistry
+from code_intel.process_files.splitters import FixedSplitter, MarkdownSplitter, SplitterRegistry, TreeSitterPythonSplitter
 from code_intel.process_files.store import VectorStore
 from code_intel.process_files.domain import ROOT_PATH, Kind
+from stores.postgres import get_pg_gateway
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +65,9 @@ class Ingestor:
 
     def run(self) -> None:
         try:
+
             for path, kind in self.walker.walk():
+                print(str(path), flush=True)
                 self._handle(path, kind)
         finally:
             self.store.flush()
@@ -85,11 +88,13 @@ class Ingestor:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     embedder = Embedder()
-    registry = SplitterRegistry(root=ROOT_PATH).add(FixedSplitter)
-    store = VectorStore(embedder=embedder)
+    registry = (SplitterRegistry(root=ROOT_PATH)
+                .add(TreeSitterPythonSplitter)
+                .add(MarkdownSplitter)
+                .add(FixedSplitter))
     walker = CorpusWalker(root=ROOT_PATH)
-    Ingestor(walker=walker, registry=registry, store=store).run()
-
+    with VectorStore(embedder=embedder, pg_gateway=get_pg_gateway()) as store:
+        Ingestor(walker=walker, registry=registry, store=store).run()
 
 if __name__ == "__main__":
     main()

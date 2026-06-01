@@ -44,6 +44,9 @@ dependencies = [
     "psycopg>=3.3.4",
     "python-ulid>=3.1.0",
     "fastembed>=0.8.0",
+    "langchain-text-splitters>=1.1.2",
+    "tree-sitter>=0.25.2",
+    "tree-sitter-python>=0.25.0",
 ]
 
 [project.optional-dependencies]

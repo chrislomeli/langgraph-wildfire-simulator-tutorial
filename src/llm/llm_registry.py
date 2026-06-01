@@ -173,6 +173,8 @@ LLM_ROLE_CONFIG: dict[str, LLMLabel] = {
     "classifier": LLMLabel.GPT_MINI,  # fast sensor pattern recognition
     "logistics": LLMLabel.GPT_MINI,  # ReAct tool-calling loop
     "logistics_extract": LLMLabel.GPT_MINI,  # transcript → LogisticsAssessment
+    "code_intel_synth": LLMLabel.HAIKU,  # code intelligence synthesis (the doer)
+    "code_intel_judge": LLMLabel.HAIKU,  # answer-quality judging (the grader)
 }
 
 
