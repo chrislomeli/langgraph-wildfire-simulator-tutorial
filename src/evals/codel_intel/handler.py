@@ -21,7 +21,7 @@ from agents.commons.schemas import Escalation, EvaluationCell
 from config import get_settings
 from evals.codel_intel.cases import RAGRetrievalCase
 from evals.codel_intel.dataset import RAGRetrievalDataset
-from evals.codel_intel.task import RAGRetrievalTask
+from evals.codel_intel.task import RAGRetrievalOutput, RAGRetrievalTask
 from evals.framework.evaluators import KeywordPresence, RetrievalRanking, Span
 from evals.framework.harness import run_eval
 from llm.llm_registry import LLM_ROLE_CONFIG, build_llm_registry, models
@@ -48,11 +48,16 @@ def evaluation_handler(langsmith: bool = False, seed_only: bool = False) -> None
     )
 
     def _anchors(case, must_only: bool) -> list[Span]:
-        """RAGRetrievalCase anchors → framework Spans (the geometry the scorer reads)."""
+        """Ground-truth anchors → framework Spans (the geometry the scorer reads).
+
+        Read from case.expected (plain dicts) not case.input: on the LangSmith path
+        case.input is a deserialized dict, but case.expected round-trips cleanly —
+        same reason KeywordPresence keys off expected_keywords.
+        """
         return [
-            Span(path=a.file, symbol=a.symbol, start=a.start, end=a.end)
-            for a in case.input.relevant
-            if a.must or not must_only
+            Span(path=a["file"], symbol=a.get("symbol"), start=a.get("start"), end=a.get("end"))
+            for a in case.expected["relevant"]
+            if a.get("must", True) or not must_only
         ]
 
     evaluators = [
@@ -85,6 +90,7 @@ def evaluation_handler(langsmith: bool = False, seed_only: bool = False) -> None
             experiment_prefix=EXPERIMENT_PREFIX,
             repeats=REPEATS,
             input_model=RAGRetrievalCase,
+            output_model=RAGRetrievalOutput,
             seed_only=seed_only,
         )
     finally:

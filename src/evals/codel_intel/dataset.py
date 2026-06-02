@@ -36,6 +36,11 @@ def _to_case(c: RAGRetrievalCase) -> Case[RAGRetrievalCase, dict]:
         expected={
             "expected_output": c.expected,
             "expected_keywords": c.keywords,
+            # Retrieval ground truth rides in `expected` as plain dicts (not on
+            # c.input) so it survives the LangSmith JSON round-trip — on that path
+            # case.input is a deserialized dict, but case.expected is read straight
+            # from example.outputs. model_dump keeps these JSON-safe on both paths.
+            "relevant": [a.model_dump() for a in c.relevant],
         },
         notes=c.notes,
     )

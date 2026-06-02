@@ -21,7 +21,8 @@ No data_store or world_engine is required:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+
+from pydantic import BaseModel, Field
 
 from agents.commons.agent_dependencies import AgentDependencies
 from code_intel.agent.graph import build_code_intel_graph
@@ -35,17 +36,21 @@ from stores.postgres.code_intel_repo import CodeIntelRepo
 logging.basicConfig(level=logging.WARNING)
 
 
-@dataclass
-class RAGRetrievalOutput:
+class RAGRetrievalOutput(BaseModel):
     """One run's product, carrying both eval layers' raw material.
 
     ``answer`` feeds the answer-keyword check (Layer B-lite); ``chunks`` is the
     ranked retrieval that RetrievalRanking scores (Layer A). Bundling them lets a
     single agent run feed both evaluators instead of running the graph twice.
+
+    Pydantic (not a dataclass) on purpose: the LangSmith seam serializes outputs
+    via model_dump and rebuilds them with model_validate (see langsmith_adapter
+    _serialize/_deserialize). RetrievedChunk is already pydantic, so the whole
+    object — answer + ranked chunks — survives the JSON round-trip intact.
     """
 
-    answer: str | None
-    chunks: list[RetrievedChunk] = field(default_factory=list)
+    answer: str | None = None
+    chunks: list[RetrievedChunk] = Field(default_factory=list)
 
 
 def _total_tokens(llm_registry) -> int:
