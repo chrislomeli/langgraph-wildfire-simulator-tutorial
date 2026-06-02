@@ -21,10 +21,11 @@ No data_store or world_engine is required:
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 
 from agents.commons.agent_dependencies import AgentDependencies
 from code_intel.agent.graph import build_code_intel_graph
-from code_intel.agent.state import CodeIntelState
+from code_intel.agent.state import CodeIntelState, RetrievedChunk
 from code_intel.process_files.embedder import Embedder
 from evals.codel_intel.cases import RAGRetrievalCase
 from evals.framework.core import Usage
@@ -32,6 +33,19 @@ from stores.postgres import get_pg_gateway
 from stores.postgres.code_intel_repo import CodeIntelRepo
 
 logging.basicConfig(level=logging.WARNING)
+
+
+@dataclass
+class RAGRetrievalOutput:
+    """One run's product, carrying both eval layers' raw material.
+
+    ``answer`` feeds the answer-keyword check (Layer B-lite); ``chunks`` is the
+    ranked retrieval that RetrievalRanking scores (Layer A). Bundling them lets a
+    single agent run feed both evaluators instead of running the graph twice.
+    """
+
+    answer: str | None
+    chunks: list[RetrievedChunk] = field(default_factory=list)
 
 
 def _total_tokens(llm_registry) -> int:
@@ -61,7 +75,7 @@ class RAGRetrievalTask:
         # Built once and reused — the embedding model is the same for every case.
         self._embedder = Embedder()
 
-    async def run(self, case: RAGRetrievalCase) -> tuple[str | None, Usage]:
+    async def run(self, case: RAGRetrievalCase) -> tuple[RAGRetrievalOutput | None, Usage]:
         try:
             if (query := case.query) is None:
                 raise Exception("no query passed into ")
@@ -107,8 +121,12 @@ class RAGRetrievalTask:
             before = _total_tokens(llm_registry)
             result: CodeIntelState = await graph.ainvoke(state)
             answer: str | None = result.get("answer")
+            # chunks are RetrievedChunk objects written by the retrieve node, in
+            # descending score order — exactly the ranked list Layer A scores.
+            chunks: list[RetrievedChunk] = list(result.get("chunks") or [])
 
-            return answer, Usage(total_tokens=_total_tokens(llm_registry) - before)
+            output = RAGRetrievalOutput(answer=answer, chunks=chunks)
+            return output, Usage(total_tokens=_total_tokens(llm_registry) - before)
 
         except Exception as e:
             logging.error(e)

@@ -22,7 +22,7 @@ from config import get_settings
 from evals.codel_intel.cases import RAGRetrievalCase
 from evals.codel_intel.dataset import RAGRetrievalDataset
 from evals.codel_intel.task import RAGRetrievalTask
-from evals.framework.evaluators import KeywordPresence
+from evals.framework.evaluators import KeywordPresence, RetrievalRanking, Span
 from evals.framework.harness import run_eval
 from llm.llm_registry import LLM_ROLE_CONFIG, build_llm_registry, models
 from prompts import PromptRegistry
@@ -47,11 +47,31 @@ def evaluation_handler(langsmith: bool = False, seed_only: bool = False) -> None
         llm_registry=llm_registry,
     )
 
+    def _anchors(case, must_only: bool) -> list[Span]:
+        """RAGRetrievalCase anchors → framework Spans (the geometry the scorer reads)."""
+        return [
+            Span(path=a.file, symbol=a.symbol, start=a.start, end=a.end)
+            for a in case.input.relevant
+            if a.must or not must_only
+        ]
+
     evaluators = [
+        # Layer B-lite: did the synthesized answer cite the identifiers it must?
         KeywordPresence(
             name="keyword-presence",
-            text=lambda o: o,
+            text=lambda o: o.answer or "",
             required=lambda c: c.expected["expected_keywords"],
+        ),
+        # Layer A: did retrieval surface the right code in the top-5, and how high?
+        RetrievalRanking(
+            name="retrieval",
+            ranked=lambda o: [
+                Span(path=f"{c.project_folder}/{c.file_name}", symbol=c.symbol_name, start=c.start_line, end=c.end_line)
+                for c in o.chunks
+            ],
+            relevant=lambda c: _anchors(c, must_only=False),
+            must=lambda c: _anchors(c, must_only=True),
+            k=5,
         ),
     ]
 
