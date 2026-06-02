@@ -183,36 +183,66 @@ LLM_ROLE_CONFIG: dict[str, LLMLabel] = {
 
 class LLMRegistry:
     """
-    Role-based catalog of LangChain chat models.
+    Role-based catalog of LangChain chat models, built just-in-time.
 
     Built once at startup and threaded into graph builders. Nodes request
     a model by role without knowing which provider or model was configured.
 
+    Lazy construction
+    ─────────────────
+    Chat models are NOT constructed up front. Each role holds a factory;
+    the model is built on first ``get(role)`` and cached thereafter. This
+    means a process only needs credentials for the providers it actually
+    uses — e.g. an eval that calls one Anthropic role won't fail because no
+    OpenAI key is set for a role it never touches.
+
+    Trade-off: credential/config errors surface on first ``get`` rather than
+    at startup. Call ``warmup()`` at a composition root to opt back into
+    fail-fast validation (e.g. a server that wants bad keys caught at boot).
+
+    Callbacks and providers are eager (they're cheap), so ``usage_report()``
+    lists every configured role and ``make_system_message()`` works without
+    building the model.
+
     Usage:
         registry = build_llm_registry(settings, models, LLM_ROLE_CONFIG)
-        llm = registry.get("classifier")
+        llm = registry.get("classifier")   # built here, on demand
         result = llm.invoke(messages)
     """
 
     def __init__(
         self,
-        clients: dict[str, Any],
+        factories: dict[str, Any],
         callbacks: dict[str, TokenUsageCallback] | None = None,
         providers: dict[str, LLMProvider] | None = None,
     ) -> None:
-        self._clients = clients
+        self._factories = factories          # role → callable() -> chat model
+        self._clients: dict[str, Any] = {}   # role → built model (lazy cache)
         self._callbacks = callbacks or {}
         self._providers = providers or {}
 
-    def get(self, role: str, default: str | None = None) -> Any:
-        client = self._clients.get(role, default)
-        if client is not None:
+    def get(self, role: str, default: Any = None) -> Any:
+        if role in self._clients:
+            return self._clients[role]
+        factory = self._factories.get(role)
+        if factory is not None:
+            client = factory()
+            self._clients[role] = client
             return client
+        if default is not None:
+            return default
         raise KeyError(f"No LLM registered for role {role!r}.")
+
+    def warmup(self, *roles: str) -> None:
+        """Eagerly build the given roles (or all configured roles if none
+        are named), so credential/config errors surface now rather than on
+        first use. Idempotent — already-built roles are skipped by get()."""
+        for role in (roles or tuple(self._factories)):
+            self.get(role)
 
     @property
     def roles(self) -> list[str]:
-        return sorted(self._clients)
+        return sorted(self._factories)
 
     def make_system_message(self, role: str, text: str):
         """Build a SystemMessage with provider-appropriate prompt-caching markup.
@@ -347,7 +377,7 @@ def build_llm_registry(
     STUB roles are skipped — registry.get() will raise KeyError if all
     roles are stubs and there is no fallback.
     """
-    clients: dict[str, Any] = {}
+    factories: dict[str, Any] = {}
     callbacks: dict[str, TokenUsageCallback] = {}
     providers: dict[str, LLMProvider] = {}
 
@@ -357,21 +387,29 @@ def build_llm_registry(
             logger.info("Skipping role %r — STUB label", role)
             continue
 
+        # Credential resolution is cheap and side-effect-free, so it stays
+        # eager. The expensive/validating step — constructing the LangChain
+        # chat model (which imports the provider SDK and checks the key) —
+        # is deferred into the factory and runs on first get(role).
         provider_kwargs = _resolve_provider_kwargs(model_cfg, settings)
         callback = TokenUsageCallback(
             role,
             price_per_1m_input=model_cfg.price_per_1m_input,
             price_per_1m_output=model_cfg.price_per_1m_output,
         )
-        chat_model = _build_chat_model(model_cfg, provider_kwargs, callback)
-        clients[role] = chat_model
+
+        def _factory(model_cfg=model_cfg, provider_kwargs=provider_kwargs, callback=callback, role=role):
+            logger.info(
+                "Building LLM for role %r → %s (%s)",
+                role,
+                model_cfg.model,
+                model_cfg.provider.value,
+            )
+            return _build_chat_model(model_cfg, provider_kwargs, callback)
+
+        factories[role] = _factory
         callbacks[role] = callback
         providers[role] = model_cfg.provider
-        logger.info(
-            "Registered LLM for role %r → %s (%s)",
-            role,
-            model_cfg.model,
-            model_cfg.provider.value,
-        )
+        logger.info("Registered LLM factory for role %r → %s (%s)", role, model_cfg.model, model_cfg.provider.value)
 
-    return LLMRegistry(clients, callbacks, providers)
+    return LLMRegistry(factories, callbacks, providers)

@@ -21,8 +21,6 @@ from __future__ import annotations
 import argparse
 import logging
 
-from langsmith import Client
-
 from agents.commons.schemas import Escalation, EvaluationCell
 from config import get_settings
 from evals.escalation.cases import EscalationCase
@@ -30,8 +28,8 @@ from evals.escalation.dataset import ScenariosDataset
 from evals.escalation.escalation_evaluators import AllFieldsPresent
 from evals.escalation.task import EscalationTask
 from evals.framework.evaluators import BooleanVote, ReferenceJudge
+from evals.framework.harness import run_eval
 from evals.framework.judge import make_llm_judge
-from evals.framework.langsmith_adapter import run_langsmith_eval, seed_dataset
 from llm.llm_registry import LLM_ROLE_CONFIG, build_llm_registry, models
 from prompts import PromptRegistry
 
@@ -54,20 +52,9 @@ EXPERIMENT_PREFIX = "evaluate-node"
 REPEATS = 3
 
 
-def main(seed_only: bool = False) -> None:
+def main(langsmith: bool = True, seed_only: bool = False) -> None:
     settings = get_settings()
     settings.apply_langsmith()
-
-    langsmith_client = Client()
-    dataset = ScenariosDataset()
-    dataset_name = dataset.name  # derived from dataset.version — single knob
-
-    dataset_id = seed_dataset(dataset, client=langsmith_client, dataset_name=dataset_name)
-    print(f"Dataset '{dataset_name}' ready (id={dataset_id})")
-
-    if seed_only:
-        print("--seed-only: skipping eval run.")
-        return
 
     llm_registry = build_llm_registry(settings, models, LLM_ROLE_CONFIG)
     prompt_registry = PromptRegistry()
@@ -104,29 +91,23 @@ def main(seed_only: bool = False) -> None:
         ),
     ]
 
-    # Reset counters so usage_report() after the run reflects only this experiment,
-    # not any tokens consumed during setup (judge construction, dataset seeding, etc.).
-    llm_registry.reset_usage()
-
-    print(f"Running eval: {EXPERIMENT_PREFIX} × {REPEATS} repetitions …")
-    run_langsmith_eval(
+    run_eval(
         task=task,
         evaluators=evaluators,
-        dataset_name=dataset_name,
+        dataset=ScenariosDataset(),
+        llm_registry=llm_registry,
+        langsmith=langsmith,
         experiment_prefix=EXPERIMENT_PREFIX,
-        num_repetitions=REPEATS,
+        repeats=REPEATS,
         input_model=EscalationCase,
         output_model=Escalation,
+        seed_only=seed_only,
     )
-    print("Done.")
-    for row in llm_registry.usage_report():
-        cost = row["estimated_cost_usd"]
-        cost_str = f"  cost=${cost:.4f}" if cost is not None else ""
-        print(f"  [{row['role']}] calls={row['calls']}  tokens={row['total_tokens']} (in={row['input_tokens']} out={row['output_tokens']}){cost_str}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seed-only", action="store_true")
+    parser.add_argument("--local", action="store_true", help="Run in-process instead of via LangSmith.")
+    parser.add_argument("--seed-only", action="store_true", help="Seed the LangSmith dataset and exit.")
     args = parser.parse_args()
-    main(seed_only=args.seed_only)
+    main(langsmith=not args.local, seed_only=args.seed_only)

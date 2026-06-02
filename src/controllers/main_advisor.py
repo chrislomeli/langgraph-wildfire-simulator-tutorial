@@ -64,7 +64,10 @@ class AdvisoryController:
         settings.apply_langsmith()
 
         # Built once — reused for every request this controller serves.
+        # The registry builds models lazily; warm up all roles now so a bad
+        # key/config fails at startup rather than on the first request.
         self._llm_registry = build_llm_registry(settings, models, LLM_ROLE_CONFIG)
+        self._llm_registry.warmup()
         self._prompt_registry = PromptRegistry()
         self._prompt_registry.register_models(
             EvaluationCell, Evaluation, Escalation, LogisticsAssessment

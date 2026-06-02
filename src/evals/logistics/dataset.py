@@ -19,7 +19,7 @@ class LogisticsDataset:
     name — and (b) keeps run records traceable to the version they scored.
     """
 
-    base_name = "logistics-golden"
+    base_name = "logistics-eval-golden"
     version = "v4"
 
     @property

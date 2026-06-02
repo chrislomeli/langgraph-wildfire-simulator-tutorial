@@ -32,8 +32,8 @@ import logging
 
 from agents.logistics.state import LogisticsAssessment
 from config import get_settings
-from evals.logistics.dataset import LogisticsDataset
-from evals.logistics.task import LogisticsTask
+from evals.wip.dataset import LogisticsDataset
+from evals.wip.task import LogisticsTask
 from evals.wip.langsmith.langsmith_runner import run_logistics_langsmith
 from llm.llm_registry import LLM_ROLE_CONFIG, build_llm_registry, models
 from prompts import PromptRegistry

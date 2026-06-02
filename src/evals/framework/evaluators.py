@@ -106,21 +106,25 @@ class KeywordPresence:
 
     name: str
     text: Callable[[Any], str]
-    required: Sequence[str]
+    required: Callable[[Any], Sequence[str]]
 
     def evaluate(self, ex: CaseExecution) -> list[Score]:
         outs = ex.outputs
-        if not outs or not self.required:
+        required = self.required(ex.case)
+
+        if not outs or not required:
             return [Score(self.name, 0.0, passed=None, detail="not scored")]
+
         haystack = " ".join(self.text(o).lower() for o in outs)
-        hits = [kw for kw in self.required if kw.lower() in haystack]
-        ok = len(hits) == len(self.required)
+        hits = [kw for kw in required if kw.lower() in haystack]
+
+        ok = len(hits) == len(required)
         return [
             Score(
                 self.name,
-                len(hits) / len(self.required),
+                len(hits) / len(required),
                 passed=ok,
-                detail=f"{len(hits)}/{len(self.required)} keywords present",
+                detail=f"{len(hits)}/{len(required)} keywords present",
             )
         ]
 

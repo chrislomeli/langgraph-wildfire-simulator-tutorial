@@ -41,7 +41,8 @@ def make_retrieve_node(embedder: Embedder, repo: CodeIntelRepo, k: int = 8):
             return {"chunks": []}
 
         vector = embedder.embed(state.query)
-        rows = repo.search_chunks(vector, k=k)
+        kind = state.kind or None
+        rows = repo.search_chunks(vector=vector, k=k, kind=kind)
 
         chunks = [
             RetrievedChunk(

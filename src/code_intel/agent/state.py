@@ -32,6 +32,8 @@ class CodeIntelState(BaseModel):
 
     # ── Input ──────────────────────────────────────────────────────────────────
     query: str
+    kind: str
+
 
     # ── Written by retrieve node ───────────────────────────────────────────────
     chunks: list[RetrievedChunk] = Field(default_factory=list)

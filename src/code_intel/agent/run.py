@@ -34,7 +34,7 @@ def main() -> None:
     query_collection(query=args.query, chunks=args.k)
 
 
-def query_collection(query: str, chunks: int = 8) -> None:
+def query_collection(query: str, kind: str|None = None, chunks: int = 8) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     pg: PgGateway
     try:
@@ -48,9 +48,9 @@ def query_collection(query: str, chunks: int = 8) -> None:
         pg = get_pg_gateway()
         pg.open()
 
-        # CodeIntelRepo.__init__ truncates — use a read-only path for queries.
-        # We bypass the constructor and talk to pgvector directly via a bare repo.
-        repo = _ReadOnlyCodeIntelRepo(pg)
+        # Query path is read-only: truncate defaults to False, so a bare repo
+        # never touches the pinned corpus. Only the ingestor passes truncate=True.
+        repo = CodeIntelRepo(pg)
 
         graph = build_code_intel_graph(
             embedder=embedder,
@@ -60,7 +60,7 @@ def query_collection(query: str, chunks: int = 8) -> None:
             k=chunks,
         )
 
-        result = graph.invoke({"query": query})
+        result = graph.invoke({"query": query, "kind": kind })
 
         print("\n" + "=" * 70)
         print(f"Query: {query}")
@@ -79,13 +79,6 @@ def query_collection(query: str, chunks: int = 8) -> None:
             pg.close()
 
 
-class _ReadOnlyCodeIntelRepo(CodeIntelRepo):
-    """CodeIntelRepo that skips the truncate on init — safe for read-only queries."""
-
-    def __init__(self, pg_gateway: PgGateway) -> None:
-        super().__init__(pg_gateway)
-        self._pg = pg_gateway  # bypass truncate_pinned_corpus
-
-
 if __name__ == "__main__":
-    query_collection(query="how does VectorStore.flush work? ")
+    # main()
+    query_collection(query="please evaluate the llm registry in this project", kind="source")
